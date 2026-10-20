@@ -1,6 +1,6 @@
 const API_BASE =
   window.API_BASE ||
-  "https://quantum-ledger-org.onrender.com"; // backend base URL (prod); override by setting window.API_BASE before script loads
+  "https://bitcoin-custody-uk.onrender.com"; // backend base URL (prod); override by setting window.API_BASE before script loads
 const COINGECKO_URL =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false";
 

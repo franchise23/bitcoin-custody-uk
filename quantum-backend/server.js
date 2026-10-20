@@ -23,6 +23,7 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:3000",
   "https://franchise23.github.io",
   "https://franchise23.github.io/quantum-ledger-clone",
+  "https://bitcoin-custody-uk.onrender.com",
   "https://quantum-ledger-org.onrender.com",
 ];
 

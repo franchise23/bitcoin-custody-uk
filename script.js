@@ -3,7 +3,7 @@
 
 const API_BASE =
   window.API_BASE ||
-  "https://quantum-ledger-org.onrender.com"; // backend base URL (prod); override by setting window.API_BASE before script loads
+  "https://bitcoin-custody-uk.onrender.com"; // backend base URL (prod); override by setting window.API_BASE before script loads
 
 async function loadPrices() {
   const tbody = document.getElementById("price-rows");

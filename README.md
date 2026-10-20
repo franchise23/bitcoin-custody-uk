@@ -1,11 +1,11 @@
-# Quantum Ledger Network
+# Bitcoin Custody UK
 
 A crypto portfolio and account platform with a secure backend API and a polished landing/dashboard experience.
 
 ## Live URLs
 
 - Frontend: https://franchise23.github.io/quantum-ledger-clone
-- Backend API: https://quantum-ledger-org.onrender.com
+- Backend API: https://bitcoin-custody-uk.onrender.com
 
 ## Local development
 
