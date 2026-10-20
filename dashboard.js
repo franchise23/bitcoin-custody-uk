@@ -4,8 +4,8 @@ const API_BASE =
 const COINGECKO_URL =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false";
 
-// Your demo portfolio (amounts you hold)
-const DEMO_HOLDINGS = [
+// Portfolio snapshot used before a user has a custom wallet or account data.
+const DEFAULT_HOLDINGS = [
   { id: "bitcoin", symbol: "BTC", label: "Bitcoin (BTC)", amount: 0.35 },
   { id: "ethereum", symbol: "ETH", label: "Ethereum (ETH)", amount: 4.8 },
   { id: "tether", symbol: "USDT", label: "Tether (USDT)", amount: 3000 },
@@ -69,7 +69,7 @@ async function fetchCurrentUser() {
   }
 }
 
-// Get live market data from CoinGecko and merge with DEMO_HOLDINGS
+// Get live market data from CoinGecko and merge with the portfolio snapshot.
 async function loadPortfolioData() {
   try {
     const res = await fetch(COINGECKO_URL);
@@ -86,7 +86,7 @@ async function loadPortfolioData() {
     let totalValue = 0;
     let topAsset = null;
 
-    const enrichedHoldings = DEMO_HOLDINGS.map((h) => {
+    const enrichedHoldings = DEFAULT_HOLDINGS.map((h) => {
       const coin = byId[h.id];
       let price = 0;
       let change24h = 0;
@@ -125,10 +125,10 @@ async function loadPortfolioData() {
 
     // Fallback: static approximations if API fails
     const fallbackHoldings = [
-      { ...DEMO_HOLDINGS[0], price: 26000, value: 26000 * DEMO_HOLDINGS[0].amount, change24h: 3.2 },
-      { ...DEMO_HOLDINGS[1], price: 1800, value: 1800 * DEMO_HOLDINGS[1].amount, change24h: 1.4 },
-      { ...DEMO_HOLDINGS[2], price: 1, value: DEMO_HOLDINGS[2].amount * 1, change24h: 0.0 },
-      { ...DEMO_HOLDINGS[3], price: 150, value: 150 * DEMO_HOLDINGS[3].amount, change24h: 5.1 },
+      { ...DEFAULT_HOLDINGS[0], price: 26000, value: 26000 * DEFAULT_HOLDINGS[0].amount, change24h: 3.2 },
+      { ...DEFAULT_HOLDINGS[1], price: 1800, value: 1800 * DEFAULT_HOLDINGS[1].amount, change24h: 1.4 },
+      { ...DEFAULT_HOLDINGS[2], price: 1, value: DEFAULT_HOLDINGS[2].amount * 1, change24h: 0.0 },
+      { ...DEFAULT_HOLDINGS[3], price: 150, value: 150 * DEFAULT_HOLDINGS[3].amount, change24h: 5.1 },
     ];
 
     let totalValue = 0;
@@ -152,6 +152,91 @@ async function loadPortfolioData() {
 }
 
 // Fill in dashboard UI with user + portfolio data
+function renderPortfolioChart(portfolio) {
+  const canvas = document.getElementById("portfolioChart");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const values = (portfolio.holdings || []).map((asset) => asset.value || 0);
+  const maxValue = Math.max(...values, 1);
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = "#1d4ed8";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+
+  values.forEach((value, index) => {
+    const x = (index / Math.max(values.length - 1, 1)) * (width - 40) + 20;
+    const y = height - 30 - (value / maxValue) * (height - 60);
+
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+
+  ctx.stroke();
+
+  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  gradient.addColorStop(0, "rgba(59, 130, 246, 0.25)");
+  gradient.addColorStop(1, "rgba(56, 189, 248, 0.1)");
+
+  ctx.lineTo(width - 20, height - 30);
+  ctx.lineTo(20, height - 30);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+}
+
+async function loadInvestmentPlans() {
+  const planContainer = document.getElementById("investment-plans");
+  if (!planContainer) return;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/investment-plans`);
+    if (!response.ok) {
+      throw new Error("Unable to load plans");
+    }
+
+    const data = await response.json();
+    const plans = Array.isArray(data.plans) ? data.plans : [];
+
+    if (!plans.length) {
+      planContainer.innerHTML = '<p class="empty-state">No plans available right now.</p>';
+      return;
+    }
+
+    planContainer.innerHTML = plans
+      .map(
+        (plan) => `
+          <div class="plan-item">
+            <div class="plan-top-row">
+              <div>
+                <div class="plan-name">${plan.name}</div>
+                <div class="plan-risk">${plan.risk}</div>
+              </div>
+              <div class="plan-roi">${plan.roi}</div>
+            </div>
+            <p>${plan.description}</p>
+            <div class="plan-meta">
+              <span>Min: $${Number(plan.minimum || 0).toLocaleString()}</span>
+              <span>${plan.duration}</span>
+            </div>
+          </div>
+        `
+      )
+      .join("");
+  } catch (error) {
+    console.error("Error loading investment plans:", error);
+    planContainer.innerHTML = '<p class="empty-state">Plans are temporarily unavailable.</p>';
+  }
+}
+
 function populateDashboard(user, portfolio) {
   const nameEl = document.getElementById("dash-username");
   const totalBalanceEl = document.getElementById("dash-total-balance");
@@ -175,6 +260,7 @@ function populateDashboard(user, portfolio) {
   }
 
   cachedMarket = portfolio.market || [];
+  renderPortfolioChart(portfolio);
 
   if (holdingsGrid) {
     holdingsGrid.innerHTML = "";
@@ -269,6 +355,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // 3. Populate UI
   populateDashboard(user, portfolio);
+  loadInvestmentPlans();
+
+  if (window.SocialProof) {
+    const socialProof = new window.SocialProof();
+    socialProof.start();
+  }
+
   setupLogout();
   setupActionModals();
 });
@@ -355,7 +448,7 @@ function setupActionModals() {
         return;
       }
       alert(
-        `Demo ${currentAction} request for ${amt} ${selectedAsset.symbol.toUpperCase()} submitted.`
+        `${currentAction} request for ${amt} ${selectedAsset.symbol.toUpperCase()} submitted.`
       );
       closeModal();
     });

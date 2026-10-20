@@ -2,11 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Dashboard · Quantum Ledger Network</title>
+  <title>Dashboard · Bitcoin Custody UK</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script>
     // Frontend override for API base (used by dashboard.js)
-    window.API_BASE = "https://quantum-ledger-org.onrender.com";
+    const isLocalDev =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
+    window.API_BASE = isLocalDev
+      ? "http://localhost:4000"
+      : "https://quantum-ledger-org.onrender.com";
   </script>
 
   <link
@@ -20,7 +25,7 @@
     <div class="dash-brand">
       <div class="dash-brand-mark">QLN</div>
       <div class="dash-brand-text">
-        <div class="dash-brand-title">Quantum Ledger</div>
+        <div class="dash-brand-title">Bitcoin Custody UK</div>
         <div class="dash-brand-sub">Dashboard</div>
       </div>
     </div>
@@ -42,7 +47,7 @@
           <h1 id="dash-total-balance">$0.00</h1>
         </div>
         <div class="dash-balance-meta">
-          <span class="dash-pill">Demo Mode</span>
+          <span class="dash-pill">Live Portfolio</span>
           <span class="dash-pill" id="dash-last-updated">Updating...</span>
         </div>
       </div>
@@ -70,15 +75,48 @@
       </div>
     </section>
 
-    <section class="dash-section">
-      <div class="dash-section-header">
-        <h3>Your Assets</h3>
+    <section class="dash-grid">
+      <div class="dash-panel dash-panel-wide">
+        <div class="dash-panel-header">
+          <h3>Portfolio Overview</h3>
+          <span class="dash-panel-badge">Live</span>
+        </div>
+        <div class="dash-chart-wrap">
+          <canvas id="portfolioChart" width="800" height="260"></canvas>
+        </div>
       </div>
-      <div class="dash-asset-grid" id="dash-asset-grid">
-        <!-- Filled by dashboard.js -->
+
+      <div class="dash-panel">
+        <div class="dash-panel-header">
+          <h3>Investment Plans</h3>
+        </div>
+        <div id="investment-plans" class="plan-list"></div>
+      </div>
+
+      <div class="dash-panel">
+        <div class="dash-panel-header">
+          <h3>Wallet Address</h3>
+        </div>
+        <div class="wallet-box">
+          <label>Primary Wallet</label>
+          <div class="wallet-address" id="wallet-address">0x8f3c2d7a9b4e1f6c21a9901d7c1d3d5f6b4a8a11</div>
+          <button type="button" class="btn btn-outline btn-sm">Copy Address</button>
+        </div>
+      </div>
+
+      <div class="dash-panel dash-panel-wide">
+        <div class="dash-panel-header">
+          <h3>Your Holdings</h3>
+          <span class="dash-panel-badge neutral">Updated</span>
+        </div>
+        <div class="dash-asset-grid" id="dash-asset-grid">
+          <!-- Filled by dashboard.js -->
+        </div>
       </div>
     </section>
   </main>
+
+  <div id="social-proof-toast-container" class="social-proof-container" aria-live="polite" aria-atomic="false"></div>
 
   <div class="dash-action-overlay"></div>
   <div class="dash-action-modal" id="dash-action-modal">
@@ -96,6 +134,7 @@
     </div>
   </div>
 
+  <script src="social-proof.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

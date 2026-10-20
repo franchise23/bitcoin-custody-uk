@@ -151,7 +151,7 @@ function setupSmoothScroll() {
 }
 
 /**
- * Contact form demo "send"
+ * Contact form submission feedback
  */
 function setupContactForm() {
   const form = document.querySelector(".contact-form");
@@ -184,7 +184,7 @@ function setupContactForm() {
 }
 
 /**
- * Demo auth system (register + login) using localStorage
+ * Secure auth flow (register + login) for the landing page.
  * On success redirects to dashboard.html
  */
 function setupAuthSystem() {
@@ -260,7 +260,7 @@ function setupAuthSystem() {
     if (mode === "login") {
       modalTitle.textContent = "Login";
       modalSubtitle.textContent =
-        "Access your Quantum Ledger account to manage your digital assets.";
+        "Access your Bitcoin Custody UK account to manage your digital assets.";
       if (registerExtra) registerExtra.style.display = "none";
     } else {
       modalTitle.textContent = "Register";
@@ -413,6 +413,23 @@ function setupAuthSystem() {
 }
 
 /**
+ * Public social-proof feed for the landing page.
+ */
+function setupSocialProof() {
+  if (!window.SocialProof || !document.getElementById("social-proof-toast-container")) {
+    return;
+  }
+
+  const feed = new window.SocialProof({
+    containerId: "social-proof-toast-container",
+    fetchUrl: `${window.API_BASE || "http://localhost:4000"}/api/transactions?limit=8`,
+    intervalMs: 10000,
+  });
+
+  feed.start();
+}
+
+/**
  * Initialize everything on page load
  */
 document.addEventListener("DOMContentLoaded", () => {
@@ -422,5 +439,6 @@ document.addEventListener("DOMContentLoaded", () => {
   setupScrollReveal();
   setupContactForm();
   setupAuthSystem();
+  setupSocialProof();
 });
 

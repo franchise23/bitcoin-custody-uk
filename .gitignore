@@ -7,3 +7,5 @@ yarn-error.log*
 package-lock.json
 dist
 coverage
+.vscode/
+quantum-backend/data/

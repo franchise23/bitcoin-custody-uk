@@ -2,11 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Quantum Ledger Network – Secure Your Digital Assets</title>
+  <title>Bitcoin Custody UK | Secure Digital Asset Advisory</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Bitcoin Custody UK is a London-based digital asset and wealth platform for secure portfolio growth, precision investment strategy, and institutional-grade access." />
   <script>
     // Frontend override for API base (used by script.js)
-    window.API_BASE = "https://quantum-ledger-org.onrender.com";
+    const isLocalDev =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
+    window.API_BASE = isLocalDev
+      ? "http://localhost:4000"
+      : "https://quantum-ledger-org.onrender.com";
   </script>
 
   <!-- Google Font: Poppins -->
@@ -22,7 +28,7 @@
   <!-- NAVBAR -->
   <header class="nav">
     <div class="container nav-inner">
-      <div class="logo">Quantum <span>Ledger</span> Network</div>
+      <div class="logo">Bitcoin <span>Custody</span> UK</div>
 
       <!-- Desktop nav -->
       <nav class="nav-links">
@@ -62,19 +68,55 @@
   <section class="hero">
     <div class="container hero-inner">
       <div class="hero-text">
-        <h1>Secure Your Digital Assets</h1>
+        <span class="eyebrow eyebrow-hero">London digital asset advisory</span>
+        <h1>Secure digital wealth with a premium London advisory platform.</h1>
         <p>
-          A user-friendly and powerful cryptocurrency ledger designed to help
-          you manage, track, and protect your crypto portfolio.
+          Bitcoin Custody UK helps investors and businesses access secure
+          digital asset opportunities, structure disciplined growth strategies,
+          and monitor portfolio performance with modern clarity and confidence.
         </p>
         <div class="hero-actions">
-          <a href="#" class="btn btn-primary js-open-register">Get Started</a>
-          <a href="#about" class="btn btn-outline">Learn More</a>
+          <a href="#plans" class="btn btn-primary">Explore Plans</a>
+          <a href="#about" class="btn btn-outline">Why Us</a>
+        </div>
+        <div class="hero-stats">
+          <div>
+            <strong>$14.8M+</strong>
+            <span>Capital monitored</span>
+          </div>
+          <div>
+            <strong>2.4k</strong>
+            <span>Investors guided</span>
+          </div>
+          <div>
+            <strong>98.9%</strong>
+            <span>Client retention</span>
+          </div>
         </div>
       </div>
       <div class="hero-graphic">
-        <!-- You can place an illustration or gradient here -->
-        <div class="hero-circle"></div>
+        <div class="hero-panel">
+          <div class="mini-card top-card">
+            <span>Portfolio Value</span>
+            <strong>$482,540.20</strong>
+            <em>+8.42% this month</em>
+          </div>
+          <div class="mini-card chart-card">
+            <div class="chart-bars">
+              <span style="height: 44%"></span>
+              <span style="height: 68%"></span>
+              <span style="height: 52%"></span>
+              <span style="height: 79%"></span>
+              <span style="height: 92%"></span>
+              <span style="height: 76%"></span>
+            </div>
+          </div>
+          <div class="mini-card bottom-card">
+            <span>Verified activity</span>
+            <strong>19 new investments</strong>
+            <em>Updated 2 mins ago</em>
+          </div>
+        </div>
       </div>
     </div>
     <div class="scroll-down">
@@ -82,31 +124,50 @@
     </div>
   </section>
 
-  <!-- ABOUT / DRIVING THE CRYPTO ECONOMY -->
+  <section class="section trust-strip">
+    <div class="container">
+      <div class="trust-panel">
+        <div class="trust-item">
+          <span class="trust-number">$14.8M+</span>
+          <p>Capital monitored across client investment strategies</p>
+        </div>
+        <div class="trust-item">
+          <span class="trust-number">2.4k</span>
+          <p>Clients supported through onboarding and portfolio growth</p>
+        </div>
+        <div class="trust-item">
+          <span class="trust-number">24/7</span>
+          <p>Dedicated monitoring and support for secure asset movement</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABOUT / WHY CLIENTS CHOOSE US -->
   <section id="about" class="section">
     <div class="container">
-      <h2>Driving the Crypto Economy</h2>
+      <h2>Why investors choose Bitcoin Custody UK</h2>
       <p class="section-subtitle">
-        A complete cryptocurrency service platform for individuals,
-        businesses, and institutions.
+        A sophisticated digital asset platform built for clarity, security,
+        and long-term capital growth across client portfolios.
       </p>
 
       <div class="feature-grid">
         <div class="feature-card">
-          <h3>Universally Accepted</h3>
-          <p>Global trading access with strong security and reliability.</p>
+          <h3>Institutional-Grade Access</h3>
+          <p>Access modern market tools and structured portfolio insights designed for serious investors.</p>
         </div>
         <div class="feature-card">
-          <h3>Decentralised Currency</h3>
-          <p>Transparent blockchain technology with no single point of control.</p>
+          <h3>Secure Digital Custody</h3>
+          <p>We support disciplined asset protection, transparent account monitoring, and risk-aware allocation.</p>
         </div>
         <div class="feature-card">
-          <h3>Secure &amp; Reliable</h3>
-          <p>Advanced protection for deposits, withdrawals, and transfers.</p>
+          <h3>Portfolio Transparency</h3>
+          <p>Live performance data, clear reporting, and structured investment guidance keep you informed.</p>
         </div>
         <div class="feature-card">
-          <h3>Safeguarded by Insurance</h3>
-          <p>Digital assets covered by institutional-grade insurance policies.</p>
+          <h3>Client-Centered Support</h3>
+          <p>Our team helps clients move from onboarding to portfolio strategy with confidence and clarity.</p>
         </div>
       </div>
     </div>
@@ -181,6 +242,96 @@
     </div>
   </section>
 
+  <section id="plans" class="section plans-section">
+    <div class="container">
+      <div class="section-heading center">
+        <span class="eyebrow">Investment plans</span>
+        <h2>Choose the path that matches your growth strategy.</h2>
+        <p>
+          Each plan is designed for a different investor profile, from steady
+          income building to higher-growth portfolio expansion.
+        </p>
+      </div>
+
+      <div class="plan-grid">
+        <article class="plan-card">
+          <div class="plan-header">
+            <span class="plan-tag">Starter</span>
+            <h3>Starter Capital</h3>
+          </div>
+          <div class="plan-price">12% <span>ROI</span></div>
+          <p class="plan-summary">A balanced entry plan for disciplined investors starting their digital asset journey.</p>
+          <ul>
+            <li>Minimum investment: $500</li>
+            <li>Duration: 6 months</li>
+            <li>Diversified asset allocation</li>
+            <li>Weekly progress updates</li>
+          </ul>
+          <div class="plan-meta">
+            <span>Low to moderate risk</span>
+            <span>Capital growth</span>
+          </div>
+        </article>
+
+        <article class="plan-card featured">
+          <div class="plan-header">
+            <span class="plan-tag">Popular</span>
+            <h3>Growth Plus</h3>
+          </div>
+          <div class="plan-price">18% <span>ROI</span></div>
+          <p class="plan-summary">Built for investors looking to grow capital faster while preserving a structured portfolio mix.</p>
+          <ul>
+            <li>Minimum investment: $2,000</li>
+            <li>Duration: 12 months</li>
+            <li>Active market rebalancing</li>
+            <li>Quarterly performance review</li>
+          </ul>
+          <div class="plan-meta">
+            <span>Balanced strategy</span>
+            <span>Higher upside</span>
+          </div>
+        </article>
+
+        <article class="plan-card">
+          <div class="plan-header">
+            <span class="plan-tag">Premium</span>
+            <h3>Income Max</h3>
+          </div>
+          <div class="plan-price">24% <span>ROI</span></div>
+          <p class="plan-summary">A premium configuration designed for investors focused on maximized long-term yield.</p>
+          <ul>
+            <li>Minimum investment: $5,000</li>
+            <li>Duration: 18 months</li>
+            <li>Income-focused allocation</li>
+            <li>Dedicated portfolio insight</li>
+          </ul>
+          <div class="plan-meta">
+            <span>Premium exposure</span>
+            <span>Long-term yield</span>
+          </div>
+        </article>
+      </div>
+
+      <div class="plan-steps">
+        <div class="step-item">
+          <span>01</span>
+          <h4>Select a plan</h4>
+          <p>Choose a strategy that matches your goals, duration, and risk preference.</p>
+        </div>
+        <div class="step-item">
+          <span>02</span>
+          <h4>Fund your wallet</h4>
+          <p>Move your capital to the wallet address and confirm your investment.</p>
+        </div>
+        <div class="step-item">
+          <span>03</span>
+          <h4>Track your gains</h4>
+          <p>Monitor portfolio growth, returns, and activity in real time.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- LIVE CRYPTOCURRENCY PRICES -->
   <section id="live-prices" class="section">
     <div class="container">
@@ -221,30 +372,45 @@
   <!-- CONTACT -->
   <section id="contact" class="section section-alt">
     <div class="container contact-grid">
-      <div>
+      <div class="contact-info-panel">
+        <span class="eyebrow">Visit our office</span>
         <h2>Get In Touch</h2>
-        <h4>Contact Information</h4>
-        <p><strong>Email:</strong> support@quantum-ledgernetwork.com</p>
-        <p><strong>Support:</strong> 24/7 Live Chat</p>
-        <p>We’re here to help you with onboarding, security, and support.</p>
+
+        <div class="contact-card">
+          <h4>Bitcoin Custody UK</h4>
+          <div class="contact-row">
+            <span class="contact-label">Address</span>
+            <p>223 Regent St., London W1B 2QD, United Kingdom</p>
+          </div>
+          <div class="contact-row">
+            <span class="contact-label">Email</span>
+            <p><a href="mailto:support@bitcoincustodyuk.com">support@bitcoincustodyuk.com</a></p>
+          </div>
+          <div class="contact-row">
+            <span class="contact-label">Phone</span>
+            <p>+44 7949 317725</p>
+          </div>
+          <div class="contact-row">
+            <span class="contact-label">Hours</span>
+            <p>Monday to Friday, 9:00 AM – 6:00 PM</p>
+          </div>
+        </div>
+
+        <p class="company-copy">
+          We help investors and businesses secure, track, and grow their digital
+          asset portfolios with a trusted London-based partner.
+        </p>
       </div>
 
-      <form class="contact-form">
-        <div class="form-group">
-          <label for="name">Full Name</label>
-          <input id="name" type="text" placeholder="Enter your full name" />
-        </div>
-        <div class="form-group">
-          <label for="email">Email Address</label>
-          <input id="email" type="email" placeholder="Enter your email" />
-        </div>
-        <div class="form-group">
-          <label for="message">Message</label>
-          <textarea id="message" rows="4" placeholder="How can we help?"></textarea>
-        </div>
-        <button type="submit" class="btn btn-primary">Send Message</button>
-        <p class="form-success" style="display:none;">Message sent successfully!</p>
-      </form>
+      <div class="map-panel">
+        <iframe
+          title="Bitcoin Custody UK London office map"
+          src="https://maps.google.com/maps?q=51.5137283,-0.1415283&z=18&output=embed"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          allowfullscreen>
+        ></iframe>
+      </div>
     </div>
   </section>
 
@@ -255,7 +421,7 @@
 
       <h2 id="modal-title">Login</h2>
       <p class="modal-subtitle">
-        Access your Quantum Ledger account to manage your digital assets.
+        Access your Bitcoin Custody UK account to manage your digital assets.
       </p>
 
       <form class="modal-form">
@@ -296,8 +462,8 @@
         </button>
 
         <p class="modal-note">
-          This is a demo authentication flow. Your credentials are stored locally
-          in this browser only.
+          Secure account access with encrypted credentials and backend-backed
+          session data for reliable sign-in.
         </p>
 
         <button
@@ -316,10 +482,10 @@
   <footer class="footer">
     <div class="container footer-grid">
       <div>
-        <div class="logo">Quantum <span>Ledger</span> Network</div>
+        <div class="logo">Bitcoin <span>Custody</span> UK</div>
         <p class="footer-text">
-          We maintain full reserves, strong banking relationships, and strict
-          compliance standards to keep your assets secure.
+          We maintain disciplined asset strategy, resilient infrastructure, and a
+          client-first approach to keep your digital wealth secure.
         </p>
       </div>
       <div>
@@ -348,10 +514,13 @@
       </div>
     </div>
     <div class="container footer-bottom">
-      <p>© 2025 Quantum Ledger Network. All rights reserved.</p>
+      <p>© 2025 Bitcoin Custody UK. All rights reserved.</p>
     </div>
   </footer>
 
+  <div id="social-proof-toast-container" class="social-proof-container" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="social-proof.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
