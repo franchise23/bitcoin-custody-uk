@@ -41,6 +41,9 @@ app.use(
 );
 app.use(express.json());
 
+const FRONTEND_ROOT = path.join(__dirname, "..");
+app.use(express.static(FRONTEND_ROOT));
+
 function ensureUserStore() {
   const dir = path.dirname(USERS_FILE);
   if (!fs.existsSync(dir)) {
@@ -222,8 +225,19 @@ function saveTransactions(transactions) {
 
 // ROUTES
 
-// Health check
 app.get("/", (req, res) => {
+  res.sendFile(path.join(FRONTEND_ROOT, "index.html"));
+});
+
+app.get(["/dashboard", "/dashboard.html"], (req, res) => {
+  res.sendFile(path.join(FRONTEND_ROOT, "dashboard.html"));
+});
+
+app.get(["/profile", "/profile.html"], (req, res) => {
+  res.sendFile(path.join(FRONTEND_ROOT, "profile.html"));
+});
+
+app.get("/api/health", (req, res) => {
   res.send("Bitcoin Custody UK backend is running");
 });
 
