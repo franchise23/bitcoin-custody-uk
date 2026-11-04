@@ -7,9 +7,12 @@
   <meta name="description" content="Bitcoin Custody UK is a London-based digital asset and wealth platform for secure portfolio growth, precision investment strategy, and institutional-grade access." />
   <script>
     // Frontend override for API base (used by script.js)
+    const host = window.location.hostname || "";
     const isLocalDev =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1";
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "" ||
+      window.location.protocol === "file:";
     window.API_BASE = isLocalDev
       ? "http://localhost:4000"
       : "https://bitcoin-custody-uk.onrender.com";
@@ -25,13 +28,52 @@
 </head>
 
 <body>
+  <div class="market-ticker-wrap" aria-label="Live markets ticker">
+    <div class="market-ticker" id="market-ticker">
+      <div class="market-ticker-viewport">
+        <div class="market-ticker-track" id="market-ticker-track" aria-live="polite"></div>
+      </div>
+      <div class="market-ticker-status" id="market-ticker-status">Bitcoin Custody UK</div>
+    </div>
+  </div>
+
   <!-- NAVBAR -->
   <header class="nav">
+    <div class="container header-utility" aria-label="Regional site links">
+      <span class="utility-label">Local sites:</span>
+      <div class="utility-sites" role="group" aria-label="Regional websites">
+        <a class="utility-site" href="#" aria-label="United States website">
+          <span class="flag flag-us" aria-hidden="true"></span>
+        </a>
+        <a class="utility-site" href="#" aria-label="United Kingdom website">
+          <span class="flag flag-uk" aria-hidden="true"></span>
+        </a>
+        <a class="utility-site" href="#" aria-label="Europe website">
+          <span class="flag flag-eu" aria-hidden="true"></span>
+        </a>
+        <a class="utility-site" href="#" aria-label="Middle East website">
+          <span class="flag flag-me" aria-hidden="true"></span>
+        </a>
+        <a class="utility-site" href="#" aria-label="Asia Pacific website">
+          <span class="flag flag-apac" aria-hidden="true"></span>
+        </a>
+      </div>
+      <a class="utility-contact" href="#contact">Contact</a>
+    </div>
+
     <div class="container nav-inner">
-      <div class="logo">Bitcoin <span>Custody</span> UK</div>
+      <a href="index.html" class="brand-lockup" aria-label="Bitcoin Custody UK homepage">
+        <span class="brand-mark" aria-hidden="true">
+          <span class="brand-mark-inner"></span>
+        </span>
+        <span class="brand-wordmark">
+          <span class="brand-wordmark-top">Bitcoin</span>
+          <span class="brand-wordmark-bottom">Custody UK</span>
+        </span>
+      </a>
 
       <!-- Desktop nav -->
-      <nav class="nav-links">
+      <nav class="nav-links" aria-label="Main navigation">
         <a href="#about" class="nav-link">About</a>
         <a href="#live-prices" class="nav-link">Live Price</a>
         <a href="#services" class="nav-link">Services</a>
@@ -119,6 +161,28 @@
         </div>
       </div>
     </div>
+
+    <div class="container hero-trust-wrap">
+      <div class="hero-trust-bar">
+        <div class="hero-trust-label">Trusted by institutional clients across the UK</div>
+        <div class="hero-trust-row">
+          <span><i>◈</i> HSBC</span>
+          <span><i>◌</i> Barclays</span>
+          <span><i>◐</i> Lloyds</span>
+          <span><i>◍</i> Standard Chartered</span>
+          <span><i>◘</i> Citi</span>
+          <span><i>◒</i> J.P. Morgan</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="hero-products-panel">
+        <div class="hero-products-title">Products &amp; services</div>
+        <div class="hero-products-subtitle">Discover our institution-ready solutions for all your digital asset needs</div>
+      </div>
+    </div>
+
     <div class="scroll-down">
       <a href="#about">Scroll Down</a>
     </div>

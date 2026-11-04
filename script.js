@@ -313,10 +313,8 @@ function setupAuthSystem() {
           return;
         }
 
-        setCurrentUser(data.user);
-        setToken(data.token);
         closeModal();
-        redirectToDashboard();
+        alert(data?.message || "Registration successful. Please check your email to verify your account before logging in.");
       } catch (err) {
         console.error("Error during register:", err);
         alert("Unable to register right now. Is the backend running?");
@@ -429,9 +427,218 @@ function setupSocialProof() {
   feed.start();
 }
 
+function formatTickerCurrency(value, currency = "GBP") {
+  if (!Number.isFinite(Number(value))) return "N/A";
+
+  const formatter = new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: value >= 100 ? 2 : 4,
+    minimumFractionDigits: value >= 100 ? 2 : value >= 1 ? 2 : 4,
+  });
+
+  return formatter.format(Number(value));
+}
+
+function formatTickerChange(changeValue) {
+  if (!Number.isFinite(Number(changeValue))) return "N/A";
+  const sign = Number(changeValue) >= 0 ? "▲" : "▼";
+  return `${sign} ${Math.abs(Number(changeValue)).toFixed(2)}%`;
+}
+
+function buildTickerItem(item) {
+  const direction = !Number.isFinite(Number(item.changePercent))
+    ? "flat"
+    : Number(item.changePercent) > 0
+      ? "up"
+      : Number(item.changePercent) < 0
+        ? "down"
+        : "flat";
+
+  return `
+    <a
+      class="market-ticker-item"
+      href="${item.url || "#"}"
+      target="_blank"
+      rel="noreferrer nofollow"
+      aria-label="${item.label} ${item.priceText} ${item.changeText}"
+    >
+      <span class="market-ticker-label">${item.label}</span>
+      <span class="market-ticker-price">${item.priceText}</span>
+      <span class="market-ticker-change ${direction}">${item.changeText}</span>
+    </a>
+  `;
+}
+
+function buildDefaultTickerItems() {
+  return [
+    { key: "SPFUT", label: "S&P FUT", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/ES=F" },
+    { key: "NQFUT", label: "NQ FUT", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/NQ=F" },
+    { key: "DOWFUT", label: "DOW FUT", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/YM=F" },
+    { key: "RUSSELL", label: "RUSSELL", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/%5ERTY" },
+    { key: "BITCOIN", label: "BITCOIN", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/BTC-USD" },
+    { key: "GOLD", label: "GOLD", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/GC=F" },
+    { key: "SILVER", label: "SILVER", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/SI=F" },
+    { key: "OIL", label: "CRUDE OIL", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/CL=F" },
+    { key: "SP500", label: "S&P 500", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/%5EGSPC" },
+    { key: "DOWJONES", label: "DOW JONES", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/%5EDJI" },
+    { key: "NASDAQ", label: "NASDAQ", priceText: "N/A", changeText: "N/A", changePercent: Number.NaN, url: "https://finance.yahoo.com/quote/%5EIXIC" },
+  ];
+}
+
+async function fetchCoinGeckoTicker() {
+  try {
+    const ids = ["bitcoin", "ethereum", "solana", "ripple"];
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=gbp&ids=${ids.join(",")}&price_change_percentage=24h&sparkline=false`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) return new Map();
+
+    const data = await response.json();
+    return new Map(
+      data.map((coin) => [coin.id, {
+        price: Number(coin.current_price),
+        changePercent: Number(coin.price_change_percentage_24h),
+      }])
+    );
+  } catch (error) {
+    console.warn("CoinGecko ticker unavailable:", error);
+    return new Map();
+  }
+}
+
+async function fetchMarketTickerData() {
+  try {
+    const response = await fetch(`${API_BASE}/api/market`);
+    if (!response.ok) {
+      return new Map();
+    }
+
+    const payload = await response.json();
+    const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
+    return new Map(
+      tickers.map((item) => [item.key, {
+        ...item,
+        price: Number(item.price),
+        changePercent: Number(item.changePercent),
+      }])
+    );
+  } catch (error) {
+    console.warn("Market ticker API unavailable:", error);
+    return new Map();
+  }
+}
+
+async function initMarketTicker() {
+  const track = document.getElementById("market-ticker-track");
+  const status = document.getElementById("market-ticker-status");
+  if (!track || !status) return;
+
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    status.textContent = "Bitcoin Custody UK";
+  }
+
+  try {
+    const marketMap = await fetchMarketTickerData();
+    const fallbackMap = await fetchCoinGeckoTicker();
+    const tickerItems = [
+      { key: "SPFUT", label: "S&P FUT", url: "https://finance.yahoo.com/quote/ES=F" },
+      { key: "NQFUT", label: "NQ FUT", url: "https://finance.yahoo.com/quote/NQ=F" },
+      { key: "DOWFUT", label: "DOW FUT", url: "https://finance.yahoo.com/quote/YM=F" },
+      { key: "RUSSELL", label: "RUSSELL", url: "https://finance.yahoo.com/quote/%5ERTY" },
+      { key: "BITCOIN", label: "BITCOIN", url: "https://finance.yahoo.com/quote/BTC-USD" },
+      { key: "GOLD", label: "GOLD", url: "https://finance.yahoo.com/quote/GC=F" },
+      { key: "SILVER", label: "SILVER", url: "https://finance.yahoo.com/quote/SI=F" },
+      { key: "OIL", label: "CRUDE OIL", url: "https://finance.yahoo.com/quote/CL=F" },
+      { key: "SP500", label: "S&P 500", url: "https://finance.yahoo.com/quote/%5EGSPC" },
+      { key: "DOWJONES", label: "DOW JONES", url: "https://finance.yahoo.com/quote/%5EDJI" },
+      { key: "NASDAQ", label: "NASDAQ", url: "https://finance.yahoo.com/quote/%5EIXIC" },
+    ];
+
+    const items = tickerItems.map((item) => {
+      const data = marketMap.get(item.key) || fallbackMap.get(item.key.toLowerCase()) || {};
+      const priceValue = Number(data.price);
+      const changeValue = Number(data.changePercent);
+      const priceText = Number.isFinite(priceValue)
+        ? item.key === "BITCOIN"
+          ? formatTickerCurrency(priceValue, "USD")
+          : formatTickerCurrency(priceValue, "USD")
+        : "N/A";
+
+      return {
+        ...item,
+        priceText,
+        changeText: Number.isFinite(changeValue) ? formatTickerChange(changeValue) : "N/A",
+        changePercent: Number.isFinite(changeValue) ? changeValue : Number.NaN,
+      };
+    });
+
+    const repeated = [...items, ...items];
+    track.innerHTML = repeated.map(buildTickerItem).join("");
+    status.textContent = "Bitcoin Custody UK";
+  } catch (error) {
+    console.error("Unable to load market ticker data:", error);
+    track.innerHTML = [...buildDefaultTickerItems(), ...buildDefaultTickerItems()].map(buildTickerItem).join("");
+    status.textContent = "Bitcoin Custody UK";
+  }
+}
+
 /**
  * Initialize everything on page load
  */
+function setupTrustedCarousel() {
+  const carousel = document.querySelector(".hero-trust-carousel");
+  if (!carousel) return;
+
+  const track = carousel.querySelector(".trusted-carousel-track");
+  const items = Array.from(track ? track.children : []);
+  const nextBtn = carousel.querySelector(".hero-trust-arrow.next");
+  const prevBtn = carousel.querySelector(".hero-trust-arrow.prev");
+
+  if (!track || items.length === 0 || !nextBtn || !prevBtn) return;
+
+  const itemWidth = items[0].getBoundingClientRect().width + 12;
+  let position = 0;
+  const maxStep = Math.max(0, items.length - Math.floor((carousel.clientWidth - 64) / itemWidth));
+
+  function updateCarousel() {
+    track.style.transform = `translateX(-${position * itemWidth}px)`;
+  }
+
+  nextBtn.addEventListener("click", () => {
+    position = Math.min(position + 1, maxStep);
+    updateCarousel();
+  });
+
+  prevBtn.addEventListener("click", () => {
+    position = Math.max(position - 1, 0);
+    updateCarousel();
+  });
+
+  window.addEventListener("resize", () => {
+    const nextMaxStep = Math.max(0, items.length - Math.floor((carousel.clientWidth - 64) / itemWidth));
+    position = Math.min(position, nextMaxStep);
+    updateCarousel();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight") {
+      nextBtn.click();
+    }
+    if (event.key === "ArrowLeft") {
+      prevBtn.click();
+    }
+  });
+
+  updateCarousel();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadPrices();
   setupMobileNav();
@@ -440,5 +647,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupContactForm();
   setupAuthSystem();
   setupSocialProof();
+  initMarketTicker();
+  setupTrustedCarousel();
 });
 
