@@ -2,8 +2,9 @@
 // No API key needed for basic use
 
 const API_BASE =
-  window.API_BASE ||
-  "https://bitcoin-custody-uk.onrender.com"; // backend base URL (prod); override by setting window.API_BASE before script loads
+  (window.QuantumUtils && typeof window.QuantumUtils.resolveApiBase === "function"
+    ? window.QuantumUtils.resolveApiBase(window.API_BASE)
+    : window.API_BASE || "https://quantum-ledger-org.onrender.com");
 
 async function loadPrices() {
   const tbody = document.getElementById("price-rows");
@@ -514,24 +515,66 @@ async function fetchCoinGeckoTicker() {
 }
 
 async function fetchMarketTickerData() {
+  const baseCandidates = Array.from(
+    new Set(
+      [window.API_BASE, API_BASE, "https://quantum-ledger-org.onrender.com", "https://bitcoin-custody-uk.onrender.com", "http://localhost:4000"].filter(Boolean)
+    )
+  );
+
+  for (const base of baseCandidates) {
+    try {
+      const response = await fetch(`${base}/api/market`);
+      if (!response.ok) continue;
+
+      const payload = await response.json();
+      const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
+      if (!tickers.length) continue;
+
+      return new Map(
+        tickers.map((item) => [item.key, {
+          ...item,
+          price: Number(item.price),
+          changePercent: Number(item.changePercent),
+        }])
+      );
+    } catch (error) {
+      console.warn("Market ticker API unavailable:", error);
+    }
+  }
+
+  return new Map();
+}
+
+async function fetchYahooTickerData(symbol) {
   try {
-    const response = await fetch(`${API_BASE}/api/market`);
+    const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
     if (!response.ok) {
-      return new Map();
+      return { price: Number.NaN, changePercent: Number.NaN };
     }
 
     const payload = await response.json();
-    const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
-    return new Map(
-      tickers.map((item) => [item.key, {
-        ...item,
-        price: Number(item.price),
-        changePercent: Number(item.changePercent),
-      }])
-    );
+    const result = payload?.chart?.result?.[0];
+    const meta = result?.meta || {};
+    const quote = result?.indicators?.quote?.[0] || {};
+    const closes = quote.close || [];
+    const lastClose = Number(closes[closes.length - 1] ?? meta.chartPreviousClose ?? meta.previousClose ?? NaN);
+    const price = Number(meta.regularMarketPrice ?? lastClose ?? NaN);
+    const previousClose = Number(meta.chartPreviousClose ?? meta.previousClose ?? lastClose ?? NaN);
+    const changePercent = Number.isFinite(Number(meta.regularMarketChangePercent))
+      ? Number(meta.regularMarketChangePercent)
+      : Number.isFinite(price) && Number.isFinite(previousClose) && previousClose !== 0
+        ? ((price - previousClose) / previousClose) * 100
+        : Number.NaN;
+
+    return { price, changePercent };
   } catch (error) {
-    console.warn("Market ticker API unavailable:", error);
-    return new Map();
+    console.warn(`Yahoo chart fetch failed for ${symbol}:`, error);
+    return { price: Number.NaN, changePercent: Number.NaN };
   }
 }
 
@@ -548,27 +591,31 @@ async function initMarketTicker() {
     const marketMap = await fetchMarketTickerData();
     const fallbackMap = await fetchCoinGeckoTicker();
     const tickerItems = [
-      { key: "SPFUT", label: "S&P FUT", url: "https://finance.yahoo.com/quote/ES=F" },
-      { key: "NQFUT", label: "NQ FUT", url: "https://finance.yahoo.com/quote/NQ=F" },
-      { key: "DOWFUT", label: "DOW FUT", url: "https://finance.yahoo.com/quote/YM=F" },
-      { key: "RUSSELL", label: "RUSSELL", url: "https://finance.yahoo.com/quote/%5ERTY" },
-      { key: "BITCOIN", label: "BITCOIN", url: "https://finance.yahoo.com/quote/BTC-USD" },
-      { key: "GOLD", label: "GOLD", url: "https://finance.yahoo.com/quote/GC=F" },
-      { key: "SILVER", label: "SILVER", url: "https://finance.yahoo.com/quote/SI=F" },
-      { key: "OIL", label: "CRUDE OIL", url: "https://finance.yahoo.com/quote/CL=F" },
-      { key: "SP500", label: "S&P 500", url: "https://finance.yahoo.com/quote/%5EGSPC" },
-      { key: "DOWJONES", label: "DOW JONES", url: "https://finance.yahoo.com/quote/%5EDJI" },
-      { key: "NASDAQ", label: "NASDAQ", url: "https://finance.yahoo.com/quote/%5EIXIC" },
+      { key: "SPFUT", label: "S&P FUT", symbol: "ES=F", url: "https://finance.yahoo.com/quote/ES=F" },
+      { key: "NQFUT", label: "NQ FUT", symbol: "NQ=F", url: "https://finance.yahoo.com/quote/NQ=F" },
+      { key: "DOWFUT", label: "DOW FUT", symbol: "YM=F", url: "https://finance.yahoo.com/quote/YM=F" },
+      { key: "RUSSELL", label: "RUSSELL", symbol: "^RTY", url: "https://finance.yahoo.com/quote/%5ERTY" },
+      { key: "BITCOIN", label: "BITCOIN", symbol: "BTC-USD", url: "https://finance.yahoo.com/quote/BTC-USD" },
+      { key: "GOLD", label: "GOLD", symbol: "GC=F", url: "https://finance.yahoo.com/quote/GC=F" },
+      { key: "SILVER", label: "SILVER", symbol: "SI=F", url: "https://finance.yahoo.com/quote/SI=F" },
+      { key: "OIL", label: "CRUDE OIL", symbol: "CL=F", url: "https://finance.yahoo.com/quote/CL=F" },
+      { key: "SP500", label: "S&P 500", symbol: "^GSPC", url: "https://finance.yahoo.com/quote/%5EGSPC" },
+      { key: "DOWJONES", label: "DOW JONES", symbol: "^DJI", url: "https://finance.yahoo.com/quote/%5EDJI" },
+      { key: "NASDAQ", label: "NASDAQ", symbol: "^IXIC", url: "https://finance.yahoo.com/quote/%5EIXIC" },
     ];
 
+    const directTickerMap = new Map();
+    for (const item of tickerItems) {
+      const quote = await fetchYahooTickerData(item.symbol);
+      directTickerMap.set(item.key, quote);
+    }
+
     const items = tickerItems.map((item) => {
-      const data = marketMap.get(item.key) || fallbackMap.get(item.key.toLowerCase()) || {};
+      const data = marketMap.get(item.key) || directTickerMap.get(item.key) || fallbackMap.get(item.key.toLowerCase()) || {};
       const priceValue = Number(data.price);
       const changeValue = Number(data.changePercent);
       const priceText = Number.isFinite(priceValue)
-        ? item.key === "BITCOIN"
-          ? formatTickerCurrency(priceValue, "USD")
-          : formatTickerCurrency(priceValue, "USD")
+        ? formatTickerCurrency(priceValue, "USD")
         : "N/A";
 
       return {

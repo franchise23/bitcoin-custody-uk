@@ -44,10 +44,13 @@
 
   class SocialProof {
     constructor(options = {}) {
+      const quantumUtils = window.QuantumUtils || {};
+      const fallbackBase = quantumUtils.resolveApiBase ? quantumUtils.resolveApiBase(window.API_BASE) : (window.API_BASE || "http://localhost:4000");
+
       this.containerId = options.containerId || "social-proof-toast-container";
       this.fetchUrl =
         options.fetchUrl ||
-        `${window.API_BASE || "http://localhost:4000"}/api/transactions?limit=8`;
+        `${fallbackBase}/api/transactions?limit=8`;
       this.intervalMs = Number(options.intervalMs || window.SOCIAL_PROOF_INTERVAL_MS || DEFAULT_INTERVAL);
       this.container = document.getElementById(this.containerId);
       this.queue = [];
@@ -73,6 +76,10 @@
     async loadTransactions() {
       if (!this.container) return [];
 
+      const fallbackTransactions = (window.QuantumUtils && Array.isArray(window.QuantumUtils.SAMPLE_COMPLETED_TRANSACTIONS))
+        ? window.QuantumUtils.normalizeTransactions(window.QuantumUtils.SAMPLE_COMPLETED_TRANSACTIONS)
+        : [];
+
       try {
         const response = await fetch(this.fetchUrl, {
           headers: {
@@ -85,11 +92,18 @@
         }
 
         const data = await response.json();
-        return Array.isArray(data.transactions) ? data.transactions : [];
+        const transactions = Array.isArray(data.transactions) ? data.transactions : [];
+        const normalizedTransactions = (window.QuantumUtils && typeof window.QuantumUtils.normalizeTransactions === "function")
+          ? window.QuantumUtils.normalizeTransactions(transactions)
+          : transactions.filter((tx) => tx && (tx.status === "completed" || tx.status === "complete" || tx.status === "success"));
+
+        return normalizedTransactions.length ? normalizedTransactions : fallbackTransactions;
       } catch (error) {
         console.error("Unable to load social proof transactions:", error);
-        this.renderErrorState();
-        return [];
+        if (!fallbackTransactions.length) {
+          this.renderErrorState();
+        }
+        return fallbackTransactions;
       }
     }
 
