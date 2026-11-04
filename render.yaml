@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bitcoin-custody-uk
+    name: quantum-ledger-org
     runtime: node
     rootDir: quantum-backend
     plan: free

@@ -37,17 +37,18 @@ const ALLOWED_ORIGINS = [
   "https://quantum-ledger-org.onrender.com",
 ];
 
-const db = new Database(DB_PATH, { fileMustExist: false });
-db.pragma("journal_mode = WAL");
-
 function ensureDataFiles() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(path.join(DATA_DIR, "users.json"))) fs.writeFileSync(path.join(DATA_DIR, "users.json"), JSON.stringify([], null, 2));
   if (!fs.existsSync(TRANSACTIONS_FILE)) fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify([], null, 2));
 }
 
+ensureDataFiles();
+
+const db = new Database(DB_PATH, { fileMustExist: false });
+db.pragma("journal_mode = WAL");
+
 function initDatabase() {
-  ensureDataFiles();
 
   db.prepare(`
     CREATE TABLE IF NOT EXISTS users (
