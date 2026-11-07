@@ -1,5 +1,7 @@
 const API_BASE =
-  window.API_BASE || "https://quantum-ledger-org.onrender.com";
+  (window.QuantumUtils && typeof window.QuantumUtils.resolveApiBase === "function"
+    ? window.QuantumUtils.resolveApiBase(window.API_BASE)
+    : window.API_BASE || "https://bitcoin-custody-uk.onrender.com");
 const MARKET_URL =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,tether,ripple,binancecoin&order=market_cap_desc&per_page=6&page=1&sparkline=false";
 

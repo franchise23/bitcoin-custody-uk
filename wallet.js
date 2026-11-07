@@ -1,4 +1,7 @@
-const API_BASE = window.API_BASE || "https://quantum-ledger-org.onrender.com";
+const API_BASE =
+  (window.QuantumUtils && typeof window.QuantumUtils.resolveApiBase === "function"
+    ? window.QuantumUtils.resolveApiBase(window.API_BASE)
+    : window.API_BASE || "https://bitcoin-custody-uk.onrender.com");
 
 function getToken() {
   try {

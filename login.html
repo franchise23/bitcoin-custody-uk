@@ -8,10 +8,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="quantum-utils.js"></script>
   <script>
     const host = window.location.hostname || "";
     const isLocalDev = host === "localhost" || host === "127.0.0.1" || host === "" || window.location.protocol === "file:";
-    window.API_BASE = isLocalDev ? "http://localhost:4100" : "https://quantum-ledger-org.onrender.com";
+    if (isLocalDev) {
+      window.API_BASE = "http://localhost:4100";
+    } else if (host.includes("bitcoin-custody-uk") || host.includes("github.io")) {
+      window.API_BASE = "https://bitcoin-custody-uk.onrender.com";
+    } else {
+      window.API_BASE = "https://bitcoin-custody-uk.onrender.com";
+    }
   </script>
 </head>
 <body class="auth-page" data-page="login">

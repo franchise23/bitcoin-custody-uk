@@ -10,7 +10,7 @@ const Database = require("better-sqlite3");
 const nodemailer = require("nodemailer");
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT || 4100);
 const JWT_SECRET = process.env.JWT_SECRET || "dev_fallback_secret";
 const APP_URL = process.env.APP_URL || "http://localhost:4100";
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "admin@bitcoincustodyuk.com").toLowerCase();
@@ -38,7 +38,6 @@ const ALLOWED_ORIGINS = [
   "https://franchise23.github.io",
   "https://franchise23.github.io/quantum-ledger-clone",
   "https://bitcoin-custody-uk.onrender.com",
-  "https://quantum-ledger-org.onrender.com",
 ];
 
 function ensureDataFiles() {

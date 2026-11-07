@@ -1,4 +1,7 @@
-const API_BASE = window.API_BASE || "http://localhost:4100";
+const API_BASE =
+  (window.QuantumUtils && typeof window.QuantumUtils.resolveApiBase === "function"
+    ? window.QuantumUtils.resolveApiBase(window.API_BASE)
+    : window.API_BASE || "https://bitcoin-custody-uk.onrender.com");
 
 function setFeedback(element, message, type = "error") {
   if (!element) return;
@@ -27,6 +30,32 @@ function togglePasswordVisibility(inputId, button) {
   input.type = isHidden ? "text" : "password";
   button.textContent = isHidden ? "Hide" : "Show";
   button.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+}
+
+function getLoginErrorMessage(error) {
+  const rawMessage = error?.message || String(error || "");
+  const normalized = (rawMessage || "").toLowerCase();
+
+  if (
+    normalized.includes("failed to fetch") ||
+    normalized.includes("networkerror") ||
+    normalized.includes("fetch resource") ||
+    normalized.includes("load failed") ||
+    normalized.includes("cors") ||
+    normalized.includes("blocked")
+  ) {
+    return `Authentication server is unreachable. Check that the backend is running and CORS is enabled for ${API_BASE}.`;
+  }
+
+  if (
+    normalized.includes("unexpected token") ||
+    normalized.includes("json") ||
+    normalized.includes("parseerror")
+  ) {
+    return `The authentication server returned an invalid response. Check the backend at ${API_BASE}.`;
+  }
+
+  return rawMessage || "Unable to log in right now.";
 }
 
 function getPasswordChecks(password) {
@@ -227,7 +256,7 @@ function setupLoginPage() {
       localStorage.setItem("qlnCurrentUser", JSON.stringify(data.user));
       window.location.href = "dashboard.html";
     } catch (error) {
-      setFeedback(feedback, error.message || "Unable to log in right now.", "error");
+      setFeedback(feedback, getLoginErrorMessage(error), "error");
     } finally {
       setButtonLoading(submitButton, false);
     }

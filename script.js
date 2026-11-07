@@ -4,7 +4,7 @@
 const API_BASE =
   (window.QuantumUtils && typeof window.QuantumUtils.resolveApiBase === "function"
     ? window.QuantumUtils.resolveApiBase(window.API_BASE)
-    : window.API_BASE || "https://quantum-ledger-org.onrender.com");
+    : window.API_BASE || "https://bitcoin-custody-uk.onrender.com");
 
 async function loadPrices() {
   const tbody = document.getElementById("price-rows");
@@ -366,7 +366,17 @@ function setupAuthSystem() {
         redirectToDashboard();
       } catch (err) {
         console.error("Error during login:", err);
-        alert("Unable to log in right now. Is the backend running?");
+        const rawMessage = err?.message || String(err || "");
+        const normalized = rawMessage.toLowerCase();
+        const message =
+          normalized.includes("failed to fetch") ||
+          normalized.includes("networkerror") ||
+          normalized.includes("fetch resource") ||
+          normalized.includes("cors") ||
+          normalized.includes("blocked")
+            ? `Authentication server is unreachable. Check that the backend is running and CORS is enabled for ${API_BASE}.`
+            : rawMessage || "Unable to log in right now. Is the backend running?";
+        alert(message);
       }
     })();
   }
@@ -528,7 +538,7 @@ async function fetchCoinGeckoTicker() {
 async function fetchMarketTickerData() {
   const baseCandidates = Array.from(
     new Set(
-      [window.API_BASE, API_BASE, "https://quantum-ledger-org.onrender.com", "https://bitcoin-custody-uk.onrender.com", "http://localhost:4100"].filter(Boolean)
+      [window.API_BASE, API_BASE, "https://bitcoin-custody-uk.onrender.com", "http://localhost:4100"].filter(Boolean)
     )
   );
 

@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Bitcoin Custody UK | Secure Digital Asset Advisory</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Bitcoin Custody UK is a London-based digital asset and wealth platform for secure portfolio growth, precision investment strategy, and institutional-grade access." />
@@ -13,9 +16,13 @@
       host === "127.0.0.1" ||
       host === "" ||
       window.location.protocol === "file:";
-    window.API_BASE = isLocalDev
-      ? "http://localhost:4100"
-      : "https://quantum-ledger-org.onrender.com";
+    if (isLocalDev) {
+      window.API_BASE = "http://localhost:4100";
+    } else if (host.includes("bitcoin-custody-uk") || host.includes("github.io")) {
+      window.API_BASE = "https://bitcoin-custody-uk.onrender.com";
+    } else {
+      window.API_BASE = "https://bitcoin-custody-uk.onrender.com";
+    }
   </script>
 
   <script src="quantum-utils.js"></script>

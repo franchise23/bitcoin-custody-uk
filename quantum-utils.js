@@ -1,7 +1,6 @@
 (function (global) {
   const DEFAULT_API_BASES = [
     "http://localhost:4100",
-    "https://quantum-ledger-org.onrender.com",
     "https://bitcoin-custody-uk.onrender.com",
   ];
 
