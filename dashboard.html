@@ -13,7 +13,7 @@
       host === "" ||
       window.location.protocol === "file:";
     window.API_BASE = isLocalDev
-      ? "http://localhost:4000"
+      ? "http://localhost:4100"
       : "https://quantum-ledger-org.onrender.com";
   </script>
 
@@ -38,6 +38,7 @@
       <div class="dash-lang">English</div>
       <div class="dash-user">
         <span id="dash-username">Trader</span>
+        <a class="btn btn-outline btn-sm" href="wallet.html">Wallet</a>
         <a class="btn btn-outline btn-sm" href="profile.html">Profile</a>
         <button id="dash-logout" class="btn btn-outline btn-sm">Log out</button>
       </div>
@@ -55,6 +56,10 @@
           <span class="dash-pill">Live Portfolio</span>
           <span class="dash-pill" id="dash-last-updated">Updating...</span>
         </div>
+      </div>
+      <div class="dash-overview-copy">
+        <p id="dash-welcome-message" class="dash-welcome-message">Welcome back.</p>
+        <p class="dash-overview-subtitle">Here's an overview of your investment portfolio.</p>
       </div>
       <div class="dash-actions">
         <button class="dash-action" data-action="Buy">
@@ -78,6 +83,25 @@
           <span>Link Wallet</span>
         </button>
       </div>
+    </section>
+
+    <section class="dash-summary-grid">
+      <article class="dash-summary-card">
+        <span class="dash-summary-label">Total Balance</span>
+        <strong id="summary-total-balance">$0.00</strong>
+      </article>
+      <article class="dash-summary-card">
+        <span class="dash-summary-label">Total Invested</span>
+        <strong id="summary-total-invested">$0.00</strong>
+      </article>
+      <article class="dash-summary-card">
+        <span class="dash-summary-label">Total Returns</span>
+        <strong id="summary-total-returns">$0.00</strong>
+      </article>
+      <article class="dash-summary-card">
+        <span class="dash-summary-label">Active Investments</span>
+        <strong id="summary-active-investments">0</strong>
+      </article>
     </section>
 
     <section class="dash-grid">
@@ -117,6 +141,27 @@
         <div class="dash-asset-grid" id="dash-asset-grid">
           <!-- Filled by dashboard.js -->
         </div>
+      </div>
+
+      <div class="dash-panel">
+        <div class="dash-panel-header">
+          <h3>My Investments</h3>
+        </div>
+        <div id="dashboard-investments" class="plan-list"></div>
+      </div>
+
+      <div class="dash-panel">
+        <div class="dash-panel-header">
+          <h3>Notifications</h3>
+        </div>
+        <div id="dashboard-notifications" class="plan-list"></div>
+      </div>
+
+      <div class="dash-panel dash-panel-wide">
+        <div class="dash-panel-header">
+          <h3>Transaction History</h3>
+        </div>
+        <div id="dashboard-transactions" class="transaction-list"></div>
       </div>
     </section>
   </main>

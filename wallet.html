@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wallet · Bitcoin Custody UK</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    const host = window.location.hostname || "";
+    const isLocalDev =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "" ||
+      window.location.protocol === "file:";
+    window.API_BASE = isLocalDev
+      ? "http://localhost:4100"
+      : "https://quantum-ledger-org.onrender.com";
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dash-body">
+  <header class="dash-appbar">
+    <div class="dash-brand">
+      <div class="dash-brand-mark">QLN</div>
+      <div class="dash-brand-text">
+        <div class="dash-brand-title">Bitcoin Custody UK</div>
+        <div class="dash-brand-sub">Wallet</div>
+      </div>
+    </div>
+    <div class="dash-appbar-actions">
+      <a class="btn btn-outline btn-sm" href="dashboard.html">Dashboard</a>
+      <a class="btn btn-outline btn-sm" href="profile.html">Profile</a>
+      <button id="wallet-logout" class="btn btn-outline btn-sm" type="button">Log out</button>
+    </div>
+  </header>
+
+  <main class="dash-main">
+    <section class="dash-summary-grid">
+      <article class="dash-summary-card">
+        <span class="dash-summary-label">Available Balance</span>
+        <strong id="wallet-available-balance">$0.00</strong>
+      </article>
+      <article class="dash-summary-card">
+        <span class="dash-summary-label">Total Deposits</span>
+        <strong id="wallet-total-deposits">$0.00</strong>
+      </article>
+      <article class="dash-summary-card">
+        <span class="dash-summary-label">Total Withdrawals</span>
+        <strong id="wallet-total-withdrawals">$0.00</strong>
+      </article>
+      <article class="dash-summary-card">
+        <span class="dash-summary-label">Pending Requests</span>
+        <strong id="wallet-pending-count">0</strong>
+      </article>
+    </section>
+
+    <section class="dash-grid">
+      <div class="dash-panel">
+        <div class="dash-panel-header">
+          <h3>Quick Transfer</h3>
+        </div>
+        <div style="display:grid; gap:1rem;">
+          <div>
+            <label for="wallet-amount" class="form-label">Amount (USD)</label>
+            <input id="wallet-amount" type="number" min="0" step="0.01" placeholder="250.00" />
+          </div>
+          <div style="display:flex; gap:.75rem; flex-wrap:wrap;">
+            <button id="wallet-deposit-btn" class="btn btn-primary" type="button">Deposit</button>
+            <button id="wallet-withdraw-btn" class="btn btn-outline" type="button">Withdraw</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-panel dash-panel-wide">
+        <div class="dash-panel-header">
+          <h3>Recent Wallet Activity</h3>
+        </div>
+        <div id="wallet-transactions" class="transaction-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="wallet.js"></script>
+</body>
+</html>

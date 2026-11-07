@@ -1,7 +1,7 @@
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
@@ -12,8 +12,12 @@ const nodemailer = require("nodemailer");
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_fallback_secret";
-const APP_URL = process.env.APP_URL || "http://localhost:4000";
+const APP_URL = process.env.APP_URL || "http://localhost:4100";
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "admin@bitcoincustodyuk.com").toLowerCase();
+const EMAIL_DELIVERY_ENABLED = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+const OTP_EXPIRES_MINUTES = 10;
+const OTP_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_TTL_HOURS = 2;
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "app.db");
 const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json");
@@ -49,12 +53,12 @@ const db = new Database(DB_PATH, { fileMustExist: false });
 db.pragma("journal_mode = WAL");
 
 function initDatabase() {
-
   db.prepare(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
+      username TEXT,
+      email TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       email_verified INTEGER NOT NULL DEFAULT 0,
       account_status TEXT NOT NULL DEFAULT 'active',
@@ -62,9 +66,24 @@ function initDatabase() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       last_login_at TEXT,
       email_verification_sent_at TEXT,
-      last_failed_login_at TEXT
+      last_failed_login_at TEXT,
+      email_verified_at TEXT
     )
   `).run();
+
+  const userColumns = db.prepare("PRAGMA table_info(users)").all();
+  const requiredUserColumns = [
+    { name: "username", definition: "TEXT" },
+    { name: "email_verification_sent_at", definition: "TEXT" },
+    { name: "last_failed_login_at", definition: "TEXT" },
+    { name: "email_verified_at", definition: "TEXT" },
+  ];
+
+  requiredUserColumns.forEach(({ name, definition }) => {
+    if (!userColumns.some((column) => column.name === name)) {
+      db.prepare(`ALTER TABLE users ADD COLUMN ${name} ${definition}`).run();
+    }
+  });
 
   db.prepare(`
     CREATE TABLE IF NOT EXISTS auth_events (
@@ -104,7 +123,109 @@ function initDatabase() {
     )
   `).run();
 
-  db.prepare(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`).run();
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS pending_registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      username TEXT NOT NULL,
+      email TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      otp_hash TEXT NOT NULL,
+      otp_expires_at TEXT NOT NULL,
+      otp_attempts_used INTEGER NOT NULL DEFAULT 0,
+      otp_last_attempt_at TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      verified_at TEXT,
+      used_at TEXT
+    )
+  `).run();
+
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS user_financial_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL UNIQUE,
+      available_balance REAL NOT NULL DEFAULT 0,
+      total_invested REAL NOT NULL DEFAULT 0,
+      total_returns REAL NOT NULL DEFAULT 0,
+      active_investments INTEGER NOT NULL DEFAULT 0,
+      total_deposits REAL NOT NULL DEFAULT 0,
+      total_withdrawals REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+  `).run();
+
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS portfolio_holdings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      asset_symbol TEXT NOT NULL,
+      asset_name TEXT NOT NULL,
+      quantity REAL NOT NULL DEFAULT 0,
+      average_cost_basis REAL NOT NULL DEFAULT 0,
+      current_value REAL NOT NULL DEFAULT 0,
+      profit_loss REAL NOT NULL DEFAULT 0,
+      allocation_percentage REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+  `).run();
+
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS investments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      plan_id TEXT NOT NULL,
+      plan_name TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      duration_months INTEGER NOT NULL DEFAULT 0,
+      expected_roi REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending_payment',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      maturity_date TEXT,
+      payment_reference TEXT,
+      metadata TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+  `).run();
+
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      status TEXT NOT NULL DEFAULT 'pending',
+      reference TEXT,
+      description TEXT,
+      metadata TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+  `).run();
+
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'info',
+      is_read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+  `).run();
+
+  db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)`).run();
+  db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username))`).run();
+  db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_email_lower ON pending_registrations (LOWER(email))`).run();
+  db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_username_lower ON pending_registrations (LOWER(username))`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_events_created ON auth_events(created_at)`).run();
 }
@@ -158,29 +279,102 @@ function loadTransactions() {
   }
 }
 
+function getInvestmentPlans() {
+  return [
+    { id: "starter", name: "Starter Capital", roi: 12, minimum: 500, duration: "6 months", durationMonths: 6, description: "A balanced growth plan for first-time investors.", risk: "Moderate" },
+    { id: "growth", name: "Growth Plus", roi: 18, minimum: 2000, duration: "12 months", durationMonths: 12, description: "Higher return potential with a diversified portfolio.", risk: "Balanced" },
+    { id: "income", name: "Income Max", roi: 24, minimum: 5000, duration: "18 months", durationMonths: 18, description: "Optimized for income-focused investors seeking longer-term yield.", risk: "Premium" },
+  ];
+}
+
+function inferInvestmentPlanId(amount) {
+  const value = Number(amount || 0);
+  if (!Number.isFinite(value) || value <= 0) return "starter";
+  if (value >= 5000) return "income";
+  if (value >= 2000) return "growth";
+  return "starter";
+}
+
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+function normalizeUsername(username) {
+  return String(username || "").trim().replace(/\s+/g, "").toLowerCase();
 }
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || ""));
 }
 
+function isValidUsername(username) {
+  const value = normalizeUsername(username);
+  return /^[a-z0-9._-]{3,24}$/.test(value);
+}
+
 function isStrongPassword(password) {
-  return typeof password === "string" && password.length >= 8;
+  if (typeof password !== "string") return false;
+  if (password.length < 8) return false;
+  if (!/[A-Z]/.test(password)) return false;
+  if (!/[a-z]/.test(password)) return false;
+  if (!/\d/.test(password)) return false;
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~`]/.test(password)) return false;
+  return true;
+}
+
+function getPasswordRequirements(password) {
+  const requirements = [
+    { key: "length", label: "8+ characters", ok: typeof password === "string" && password.length >= 8 },
+    { key: "uppercase", label: "One uppercase letter", ok: /[A-Z]/.test(password || "") },
+    { key: "lowercase", label: "One lowercase letter", ok: /[a-z]/.test(password || "") },
+    { key: "number", label: "One number", ok: /\d/.test(password || "") },
+    { key: "special", label: "One special character", ok: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~`]/.test(password || "") },
+  ];
+  return requirements;
 }
 
 function randomToken() {
   return crypto.randomBytes(32).toString("hex");
 }
 
+function randomSixDigitOtp() {
+  return String(crypto.randomInt(100000, 1000000)).padStart(6, "0");
+}
+
+function hashOtp(value) {
+  return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
 function getExpiryDate(hours) {
   return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
 }
 
+function isEmailDeliveryConfigured() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+function shouldAutoVerifyEmails() {
+  return !isEmailDeliveryConfigured();
+}
+
 function getUserByEmail(email) {
   const normalized = normalizeEmail(email);
-  return db.prepare(`SELECT * FROM users WHERE email = ?`).get(normalized) || null;
+  return db.prepare(`SELECT * FROM users WHERE lower(email) = ?`).get(normalized) || null;
+}
+
+function getUserByUsername(username) {
+  const normalized = normalizeUsername(username);
+  if (!normalized) return null;
+  return db.prepare(`SELECT * FROM users WHERE lower(username) = ?`).get(normalized) || null;
+}
+
+function getUserByIdentifier(identifier) {
+  const normalized = normalizeEmail(identifier);
+  const username = normalizeUsername(identifier);
+
+  if (!normalized && !username) return null;
+  const user = db.prepare(`SELECT * FROM users WHERE lower(email) = ? OR lower(username) = ?`).get(normalized || "", username || "") || null;
+  return user;
 }
 
 function getUserById(id) {
@@ -194,15 +388,91 @@ function createAuthEvent({ userId = null, email = null, eventType, outcome, reas
   `).run(userId, email, eventType, outcome, reason, metadata ? JSON.stringify(metadata) : null);
 }
 
+function ensureUserFinancialAccount(userId) {
+  const normalizedId = Number(userId);
+  const existing = db.prepare(`SELECT * FROM user_financial_accounts WHERE user_id = ?`).get(normalizedId);
+  if (existing) return existing;
+
+  db.prepare(`
+    INSERT INTO user_financial_accounts (user_id, available_balance, total_invested, total_returns, active_investments, total_deposits, total_withdrawals, currency, updated_at)
+    VALUES (?, 0, 0, 0, 0, 0, 0, 'USD', datetime('now'))
+  `).run(normalizedId);
+
+  return db.prepare(`SELECT * FROM user_financial_accounts WHERE user_id = ?`).get(normalizedId);
+}
+
+function buildDashboardSummary(userId) {
+  const normalizedId = Number(userId);
+  const account = ensureUserFinancialAccount(normalizedId);
+  const holdings = db.prepare(`SELECT * FROM portfolio_holdings WHERE user_id = ? ORDER BY updated_at DESC`).all(normalizedId);
+  const investments = db.prepare(`SELECT * FROM investments WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`).all(normalizedId);
+  const notifications = db.prepare(`SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`).all(normalizedId);
+  const recentTransactions = db.prepare(`SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`).all(normalizedId);
+
+  return {
+    totals: {
+      totalBalance: Number(account.available_balance || 0),
+      totalInvested: Number(account.total_invested || 0),
+      totalReturns: Number(account.total_returns || 0),
+      activeInvestments: Number(account.active_investments || 0),
+      currency: account.currency || 'USD',
+    },
+    holdings: holdings.map((item) => ({
+      id: item.id,
+      assetName: item.asset_name,
+      assetSymbol: item.asset_symbol,
+      quantity: Number(item.quantity || 0),
+      averageCostBasis: Number(item.average_cost_basis || 0),
+      currentValue: Number(item.current_value || 0),
+      profitLoss: Number(item.profit_loss || 0),
+      allocationPercentage: Number(item.allocation_percentage || 0),
+      currency: item.currency || 'USD',
+    })),
+    investments: investments.map((item) => ({
+      id: item.id,
+      planId: item.plan_id,
+      planName: item.plan_name,
+      amount: Number(item.amount || 0),
+      durationMonths: Number(item.duration_months || 0),
+      expectedRoi: Number(item.expected_roi || 0),
+      status: item.status,
+      createdAt: item.created_at,
+      maturityDate: item.maturity_date,
+      paymentReference: item.payment_reference,
+    })),
+    notifications: notifications.map((item) => ({
+      id: item.id,
+      title: item.title,
+      message: item.message,
+      type: item.type,
+      isRead: !!item.is_read,
+      createdAt: item.created_at,
+    })),
+    transactions: recentTransactions.map((item) => ({
+      id: item.id,
+      type: item.type,
+      amount: Number(item.amount || 0),
+      currency: item.currency || 'USD',
+      status: item.status,
+      description: item.description,
+      reference: item.reference,
+      createdAt: item.created_at,
+    })),
+  };
+}
+
 function sendEmail({ to, subject, text, html }) {
   const host = process.env.SMTP_HOST;
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
 
   if (!host || !smtpUser || !smtpPass) {
-    console.log(`EMAIL SIMULATION: to=${to} | subject=${subject}`);
-    console.log(text);
-    return Promise.resolve({ accepted: [to], simulated: true });
+    const fallbackUrl = text.match(/https?:\/\/[^\s]+/)?.[0];
+    console.warn(`EMAIL DELIVERY IS NOT CONFIGURED. To send real emails, set SMTP_HOST, SMTP_USER, SMTP_PASS, and APP_URL.`);
+    if (fallbackUrl) {
+      console.warn(`Verification fallback URL: ${fallbackUrl}`);
+    }
+    return Promise.resolve({ accepted: [to], simulated: true, messageId: null, emailConfigured: false });
   }
 
   const transporter = nodemailer.createTransport({
@@ -212,7 +482,7 @@ function sendEmail({ to, subject, text, html }) {
     auth: { user: smtpUser, pass: smtpPass },
   });
 
-  return transporter.sendMail({ from: process.env.SMTP_FROM || smtpUser, to, subject, text, html });
+  return transporter.sendMail({ from: process.env.SMTP_FROM || smtpUser, to, subject, text, html }).then((info) => ({ ...info, emailConfigured: true }));
 }
 
 function buildUserResponse(user) {
@@ -220,6 +490,7 @@ function buildUserResponse(user) {
   return {
     id: user.id,
     name: user.name,
+    username: user.username,
     email: user.email,
     emailVerified: !!user.email_verified,
     accountStatus: user.account_status,
@@ -277,26 +548,91 @@ async function sendVerificationEmail(user) {
   const { token, expiresAt } = createVerificationToken(user.id);
   const verificationUrl = `${APP_URL}/api/verify-email?token=${token}`;
   const text = `Hello ${user.name},\n\nPlease verify your email to activate your account.\n${verificationUrl}\n\nThis link expires at: ${new Date(expiresAt).toLocaleString()}`;
-  await sendEmail({
+
+  const emailResult = await sendEmail({
     to: user.email,
     subject: "Verify your Bitcoin Custody UK account",
     text,
     html: `<p>Hello ${user.name},</p><p>Please verify your email to activate your account.</p><p><a href="${verificationUrl}">Verify your account</a></p><p>This link expires at: ${new Date(expiresAt).toLocaleString()}</p>`,
   });
+
   db.prepare(`UPDATE users SET email_verification_sent_at = datetime('now') WHERE id = ?`).run(user.id);
-  return true;
+  return {
+    token,
+    expiresAt,
+    verificationUrl,
+    emailSent: Boolean(isEmailDeliveryConfigured() && (emailResult?.accepted || emailResult?.messageId || emailResult?.response)),
+    simulated: Boolean(!isEmailDeliveryConfigured() && emailResult?.simulated),
+  };
+}
+
+function createPendingRegistration({ name, username, email, passwordHash }) {
+  const otp = randomSixDigitOtp();
+  const otpHash = hashOtp(otp);
+  const expiresAt = new Date(Date.now() + OTP_EXPIRES_MINUTES * 60 * 1000).toISOString();
+  const existing = db.prepare(`SELECT * FROM pending_registrations WHERE lower(email) = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1`).get(normalizeEmail(email));
+  if (existing) {
+    db.prepare(`UPDATE pending_registrations SET status = 'expired', used_at = datetime('now') WHERE id = ?`).run(existing.id);
+  }
+
+  const result = db.prepare(`
+    INSERT INTO pending_registrations (name, username, email, password_hash, otp_hash, otp_expires_at, otp_attempts_used, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 0, 'pending', datetime('now'))
+  `).run(String(name).trim(), normalizeUsername(username), normalizeEmail(email), passwordHash, otpHash, expiresAt);
+
+  const row = db.prepare(`SELECT * FROM pending_registrations WHERE id = ?`).get(result.lastInsertRowid);
+  if (!isEmailDeliveryConfigured()) {
+    console.warn(`OTP FOR ${row.email}: ${otp}`);
+  }
+
+  return { pendingRegistration: row, otp };
+}
+
+async function sendRegistrationOtpEmail(email, name, otp) {
+  const expiresAt = Date.now() + OTP_EXPIRES_MINUTES * 60 * 1000;
+  const subject = "Verify your Bitcoin Custody UK account";
+  const html = `
+    <div style="font-family: Arial, sans-serif; background: #f4f7fb; padding: 32px 16px; color: #0f172a;">
+      <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #dfe7f5;">
+        <div style="background: linear-gradient(135deg, #0f172a, #12326d); color: white; padding: 24px 28px;">
+          <div style="font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.9;">Bitcoin Custody UK</div>
+          <h2 style="margin: 12px 0 0; font-size: 28px;">Verify your email address</h2>
+        </div>
+        <div style="padding: 24px 28px;">
+          <p>Hello ${name},</p>
+          <p>Use the six-digit verification code below to complete your registration.</p>
+          <div style="margin: 28px 0; text-align: center; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 18px 12px;">
+            <div style="font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: #475569; margin-bottom: 8px;">Your code</div>
+            <div style="font-size: 36px; letter-spacing: 10px; font-weight: 700; color: #0f172a;">${otp}</div>
+          </div>
+          <p>This code expires in ${OTP_EXPIRES_MINUTES} minutes.</p>
+          <p style="color: #475569;">Security notice: never share this code with anyone.</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const text = `Bitcoin Custody UK account verification\n\nHello ${name},\nUse the verification code below to complete your registration:\n\n${otp}\n\nThis code expires in ${OTP_EXPIRES_MINUTES} minutes. Never share this code with anyone.`;
+  const result = await sendEmail({
+    to: email,
+    subject,
+    text,
+    html,
+  });
+
+  return { emailSent: Boolean(isEmailDeliveryConfigured() && (result?.accepted || result?.messageId || result?.response)), expiresAt };
 }
 
 function createResetToken(userId) {
   const token = randomToken();
-  const expiresAt = getExpiryDate(2);
+  const expiresAt = getExpiryDate(PASSWORD_RESET_TTL_HOURS / 24);
   db.prepare(`INSERT INTO password_reset_tokens (user_id, token, expires_at, created_at) VALUES (?, ?, ?, datetime('now'))`).run(userId, token, expiresAt);
   return { token, expiresAt };
 }
 
 async function sendPasswordResetEmail(user) {
   const { token, expiresAt } = createResetToken(user.id);
-  const link = `${APP_URL}/api/reset-password?token=${token}`;
+  const link = `${APP_URL}/reset-password.html?token=${token}`;
   const text = `Hello ${user.name},\n\nUse this link to reset your password:\n${link}\n\nThis link expires at: ${new Date(expiresAt).toLocaleString()}`;
   await sendEmail({
     to: user.email,
@@ -311,7 +647,7 @@ function upsertAdminUser() {
   const existing = getUserByEmail(ADMIN_EMAIL);
   if (!existing) {
     const passwordHash = bcrypt.hashSync("Admin@123456", 12);
-    db.prepare(`INSERT INTO users (name, email, password_hash, email_verified, account_status, is_admin, created_at, last_login_at) VALUES (?, ?, ?, 1, 'active', 1, datetime('now'), datetime('now'))`).run("Bitcoin Custody UK Admin", ADMIN_EMAIL, passwordHash);
+    db.prepare(`INSERT INTO users (name, username, email, password_hash, email_verified, account_status, is_admin, created_at, last_login_at) VALUES (?, ?, ?, ?, 1, 'active', 1, datetime('now'), datetime('now'))`).run("Bitcoin Custody UK Admin", "admin", ADMIN_EMAIL, passwordHash);
   }
 }
 
@@ -323,36 +659,173 @@ app.get(["/profile", "/profile.html"], (req, res) => res.sendFile(path.join(FRON
 app.get(["/admin", "/admin.html"], authMiddleware, requireAdmin, (req, res) => res.sendFile(path.join(FRONTEND_ROOT, "admin.html")));
 
 app.get("/api/health", (req, res) => res.send("Bitcoin Custody UK backend is running"));
+app.get(["/wallet", "/wallet.html"], (req, res) => res.sendFile(path.join(FRONTEND_ROOT, "wallet.html")));
+
+app.get("/api/wallet/summary", authMiddleware, (req, res) => {
+  const summary = buildDashboardSummary(req.user.id);
+  const txs = db.prepare(`SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 25`).all(req.user.id);
+  const pendingWithdrawals = txs.filter((tx) => tx.type === "withdrawal" && tx.status === "pending");
+
+  return res.json({
+    user: buildUserResponse(req.user),
+    account: {
+      userId: req.user.id,
+      availableBalance: Number(summary.totals.totalBalance || 0),
+      totalDeposits: Number(db.prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM transactions WHERE user_id = ? AND type = 'deposit' AND status = 'completed'`).get(req.user.id)?.total || 0),
+      totalWithdrawals: Number(db.prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM transactions WHERE user_id = ? AND type = 'withdrawal'`).get(req.user.id)?.total || 0),
+      currency: "USD",
+    },
+    totals: summary.totals,
+    pendingWithdrawals: pendingWithdrawals.map((item) => ({
+      id: item.id,
+      amount: Number(item.amount || 0),
+      status: item.status,
+      reference: item.reference,
+      description: item.description,
+      createdAt: item.created_at,
+    })),
+    transactions: summary.transactions,
+  });
+});
 
 app.post("/api/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body || {};
+    const { name, username, email, password, confirmPassword } = req.body || {};
     const normalizedEmail = normalizeEmail(email);
+    const normalizedUsername = normalizeUsername(username);
 
     if (!name || !String(name).trim()) return res.status(400).json({ error: "Full name is required." });
+    if (!normalizedUsername || !isValidUsername(normalizedUsername)) return res.status(400).json({ error: "Username must be 3-24 characters and contain only letters, numbers, dots, underscores, or hyphens." });
     if (!normalizedEmail || !isValidEmail(normalizedEmail)) return res.status(400).json({ error: "A valid email address is required." });
-    if (!isStrongPassword(password)) return res.status(400).json({ error: "Password must be at least 8 characters long." });
+    if (!password || !isStrongPassword(password)) return res.status(400).json({ error: "Password must include at least 8 characters, one uppercase letter, one lowercase letter, one number, and one special character." });
+    if (confirmPassword !== undefined && password !== confirmPassword) return res.status(400).json({ error: "Passwords do not match." });
 
-    if (getUserByEmail(normalizedEmail)) {
+    if (getUserByEmail(normalizedEmail) || db.prepare(`SELECT * FROM pending_registrations WHERE lower(email) = ? AND status = 'pending'`).get(normalizedEmail)) {
       createAuthEvent({ email: normalizedEmail, eventType: "registration", outcome: "failed", reason: "duplicate_email" });
-      return res.status(409).json({ error: "An account with this email already exists." });
+      return res.status(409).json({ error: "An account with this email address already exists." });
+    }
+
+    const userExistsByUsername = getUserByUsername(normalizedUsername);
+    const pendingUserExistsByUsername = db.prepare(`SELECT * FROM pending_registrations WHERE lower(username) = ? AND status = 'pending'`).get(normalizedUsername);
+    if (userExistsByUsername || pendingUserExistsByUsername) {
+      createAuthEvent({ email: normalizedEmail, eventType: "registration", outcome: "failed", reason: "duplicate_username" });
+      return res.status(409).json({ error: "That username is already taken. Please choose another one." });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const insert = db.prepare(`INSERT INTO users (name, email, password_hash, email_verified, account_status, is_admin, created_at) VALUES (?, ?, ?, 0, 'active', 0, datetime('now'))`).run(String(name).trim(), normalizedEmail, passwordHash);
-    const user = getUserById(insert.lastInsertRowid);
-    createAuthEvent({ userId: user.id, email: user.email, eventType: "registration", outcome: "success" });
+    const pending = createPendingRegistration({ name: String(name).trim(), username: normalizedUsername, email: normalizedEmail, passwordHash });
+    const emailResult = await sendRegistrationOtpEmail(normalizedEmail, String(name).trim(), pending.otp);
 
-    try { await sendVerificationEmail(user); } catch (err) { console.error("Verification email failed:", err); }
+    createAuthEvent({ email: normalizedEmail, eventType: "registration_pending", outcome: "success", reason: "otp_sent" });
 
     return res.status(201).json({
-      message: "Registration successful. Please verify your email to activate your account.",
-      user: buildUserResponse(user),
+      message: emailResult.emailSent
+        ? "Registration received. Please verify your email with the six-digit code we sent you."
+        : "Registration received. Your six-digit code was generated. Please complete verification in the next step.",
+      email: normalizedEmail,
+      username: pending.pendingRegistration.username,
+      emailSent: emailResult.emailSent,
+      verificationRequired: true,
     });
   } catch (err) {
     console.error("Error in /api/register:", err);
     return res.status(500).json({ error: "Unable to create your account right now." });
   }
+});
+
+app.post("/api/register/verify", async (req, res) => {
+  const { email, code } = req.body || {};
+  const normalizedEmail = normalizeEmail(email);
+  const otp = String(code || "").trim();
+
+  if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+    return res.status(400).json({ error: "A valid email address is required." });
+  }
+  if (!/^\d{6}$/.test(otp)) {
+    return res.status(400).json({ error: "Verification code must be six digits." });
+  }
+
+  const pending = db.prepare(`SELECT * FROM pending_registrations WHERE lower(email) = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1`).get(normalizedEmail);
+  if (!pending) {
+    return res.status(404).json({ error: "No pending registration was found for this email." });
+  }
+
+  if (new Date(pending.otp_expires_at).getTime() < Date.now()) {
+    db.prepare(`UPDATE pending_registrations SET status = 'expired', used_at = datetime('now') WHERE id = ?`).run(pending.id);
+    return res.status(410).json({ error: "This verification code has expired. Request a new one." });
+  }
+
+  const attemptsUsed = Number(pending.otp_attempts_used || 0);
+  if (attemptsUsed >= OTP_MAX_ATTEMPTS) {
+    db.prepare(`UPDATE pending_registrations SET status = 'expired', used_at = datetime('now') WHERE id = ?`).run(pending.id);
+    return res.status(429).json({ error: "This verification code has been used too many times. Request a new one." });
+  }
+
+  if (hashOtp(otp) !== pending.otp_hash) {
+    const nextAttempts = attemptsUsed + 1;
+    db.prepare(`UPDATE pending_registrations SET otp_attempts_used = ?, otp_last_attempt_at = datetime('now') WHERE id = ?`).run(nextAttempts, pending.id);
+    const remaining = Math.max(0, OTP_MAX_ATTEMPTS - nextAttempts);
+    return res.status(400).json({ error: remaining > 0 ? `Invalid verification code. ${remaining} attempts remaining.` : "Verification code expired due to too many failed attempts." });
+  }
+
+  const existingUser = getUserByEmail(pending.email) || getUserByUsername(pending.username);
+  if (existingUser) {
+    db.prepare(`UPDATE pending_registrations SET status = 'used', used_at = datetime('now') WHERE id = ?`).run(pending.id);
+    return res.status(409).json({ error: "This account is already registered." });
+  }
+
+  try {
+    const insert = db.prepare(`
+      INSERT INTO users (name, username, email, password_hash, email_verified, account_status, is_admin, created_at, email_verified_at, last_login_at)
+      VALUES (?, ?, ?, ?, 1, 'active', 0, datetime('now'), datetime('now'), datetime('now'))
+    `).run(pending.name, pending.username, pending.email, pending.password_hash);
+
+    db.prepare(`UPDATE pending_registrations SET status = 'used', verified_at = datetime('now'), used_at = datetime('now') WHERE id = ?`).run(pending.id);
+
+    const user = getUserById(insert.lastInsertRowid);
+    createAuthEvent({ userId: user.id, email: user.email, eventType: "email_verification", outcome: "success", reason: "otp_verified" });
+
+    const token = generateToken(user);
+    return res.json({
+      message: "Email verified successfully. Your account is now active.",
+      token,
+      user: buildUserResponse(user),
+      redirectTo: "/dashboard.html",
+    });
+  } catch (error) {
+    console.error("Error finalizing registration:", error);
+    return res.status(500).json({ error: "Unable to complete registration right now." });
+  }
+});
+
+app.post("/api/register/resend", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "A valid email address is required." });
+  }
+
+  const pending = db.prepare(`SELECT * FROM pending_registrations WHERE lower(email) = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1`).get(email);
+  if (!pending) {
+    return res.status(404).json({ error: "There is no pending registration for this email." });
+  }
+
+  const lastAttempt = pending.otp_last_attempt_at ? new Date(pending.otp_last_attempt_at).getTime() : 0;
+  if (Date.now() - lastAttempt < 60000) {
+    return res.status(429).json({ error: "Please wait 60 seconds before requesting a new verification code." });
+  }
+
+  const otp = randomSixDigitOtp();
+  const otpHash = hashOtp(otp);
+  const expiresAt = new Date(Date.now() + OTP_EXPIRES_MINUTES * 60 * 1000).toISOString();
+
+  db.prepare(`UPDATE pending_registrations SET otp_hash = ?, otp_expires_at = ?, otp_attempts_used = 0, otp_last_attempt_at = datetime('now') WHERE id = ?`).run(otpHash, expiresAt, pending.id);
+
+  if (!isEmailDeliveryConfigured()) {
+    console.warn(`RESEND OTP FOR ${pending.email}: ${otp}`);
+  }
+
+  await sendRegistrationOtpEmail(pending.email, pending.name, otp);
+  return res.json({ message: "A new verification code has been sent to your email." });
 });
 
 app.get("/api/verify-email", (req, res) => {
@@ -403,23 +876,23 @@ app.post("/api/resend-verification", async (req, res) => {
 
 app.post("/api/login", async (req, res) => {
   try {
-    const { email, password } = req.body || {};
-    const normalizedEmail = normalizeEmail(email);
+    const { identifier, password, email } = req.body || {};
+    const userIdentifier = String(identifier || email || "").trim();
 
-    if (!normalizedEmail || !isValidEmail(normalizedEmail)) return res.status(400).json({ error: "A valid email address is required." });
-    if (!password || !isStrongPassword(password)) return res.status(400).json({ error: "Password is required and must be at least 8 characters long." });
+    if (!userIdentifier) return res.status(400).json({ error: "Username or email is required." });
+    if (!password || !isStrongPassword(password)) return res.status(400).json({ error: "Password must include at least 8 characters, one uppercase letter, one lowercase letter, one number, and one special character." });
 
-    const user = getUserByEmail(normalizedEmail);
+    const user = getUserByIdentifier(userIdentifier);
     if (!user) {
-      createAuthEvent({ email: normalizedEmail, eventType: "login", outcome: "failed", reason: "user_not_found" });
-      return res.status(400).json({ error: "Invalid email or password." });
+      createAuthEvent({ email: normalizeEmail(userIdentifier), eventType: "login", outcome: "failed", reason: "user_not_found" });
+      return res.status(400).json({ error: "Invalid username/email or password." });
     }
 
     const matches = await bcrypt.compare(password, user.password_hash);
     if (!matches) {
       db.prepare(`UPDATE users SET last_failed_login_at = datetime('now') WHERE id = ?`).run(user.id);
       createAuthEvent({ userId: user.id, email: user.email, eventType: "login", outcome: "failed", reason: "invalid_password" });
-      return res.status(400).json({ error: "Invalid email or password." });
+      return res.status(400).json({ error: "Invalid username/email or password." });
     }
 
     if (!user.email_verified) {
@@ -450,6 +923,14 @@ app.post("/api/logout", authMiddleware, (req, res) => {
 });
 
 app.get("/api/me", authMiddleware, (req, res) => res.json({ user: buildUserResponse(req.user) }));
+
+app.get("/api/dashboard/summary", authMiddleware, (req, res) => {
+  const summary = buildDashboardSummary(req.user.id);
+  return res.json({
+    user: buildUserResponse(req.user),
+    ...summary,
+  });
+});
 
 app.post("/api/request-password-reset", async (req, res) => {
   const email = normalizeEmail(req.body?.email);
@@ -507,16 +988,164 @@ app.post("/api/reset-password", async (req, res) => {
 });
 
 app.get("/api/investment-plans", (req, res) => {
-  const plans = [
-    { id: "starter", name: "Starter Capital", roi: "12%", minimum: 500, duration: "6 months", description: "A balanced growth plan for first-time investors.", risk: "Moderate" },
-    { id: "growth", name: "Growth Plus", roi: "18%", minimum: 2000, duration: "12 months", description: "Higher return potential with a diversified portfolio.", risk: "Balanced" },
-    { id: "income", name: "Income Max", roi: "24%", minimum: 5000, duration: "18 months", description: "Optimized for income-focused investors seeking longer-term yield.", risk: "Premium" },
-  ];
-  return res.json({ plans });
+  return res.json({ plans: getInvestmentPlans().map((plan) => ({ ...plan, roi: `${plan.roi}%` })) });
+});
+
+app.post("/api/invest", authMiddleware, (req, res) => {
+  try {
+    const { planId, amount, assetSymbol = "BTC", assetName = "Bitcoin", paymentReference } = req.body || {};
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: "A valid investment amount is required." });
+    }
+
+    const selectedPlan = getInvestmentPlans().find((plan) => plan.id === (planId || inferInvestmentPlanId(parsedAmount))) || getInvestmentPlans()[0];
+    if (parsedAmount < Number(selectedPlan.minimum || 0)) {
+      return res.status(400).json({ error: `The minimum investment for ${selectedPlan.name} is $${Number(selectedPlan.minimum || 0).toLocaleString()}.` });
+    }
+
+    const userId = req.user.id;
+    const reference = String(paymentReference || `INV-${Date.now()}-${userId}`).trim();
+    const durationMonths = Number(selectedPlan.durationMonths || selectedPlan.duration?.match(/(\d+)/)?.[1] || 0);
+    const expectedRoi = Number(selectedPlan.roi || 0);
+    const maturityDate = new Date(Date.now() + durationMonths * 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const investmentInsert = db.prepare(`
+      INSERT INTO investments (user_id, plan_id, plan_name, amount, duration_months, expected_roi, status, created_at, maturity_date, payment_reference, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', datetime('now'), ?, ?, ?)
+    `);
+    investmentInsert.run(userId, selectedPlan.id, selectedPlan.name, parsedAmount, durationMonths, expectedRoi, maturityDate, reference, JSON.stringify({ assetSymbol, assetName, source: "dashboard_purchase" }));
+
+    db.prepare(`
+      INSERT INTO transactions (user_id, type, amount, currency, status, reference, description, metadata, created_at)
+      VALUES (?, 'investment', ?, 'USD', 'completed', ?, ?, ?, datetime('now'))
+    `).run(userId, parsedAmount, reference, `Investment in ${selectedPlan.name}`, JSON.stringify({ assetSymbol, assetName, planId: selectedPlan.id }));
+
+    db.prepare(`
+      INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+      VALUES (?, 'Investment confirmed', ?, 'success', 0, datetime('now'))
+    `).run(userId, `Your ${selectedPlan.name} investment of $${parsedAmount.toLocaleString()} has been recorded.`);
+
+    const account = ensureUserFinancialAccount(userId);
+    db.prepare(`
+      UPDATE user_financial_accounts
+      SET total_invested = total_invested + ?, active_investments = active_investments + 1, total_returns = total_returns + ?, updated_at = datetime('now')
+      WHERE user_id = ?
+    `).run(parsedAmount, parsedAmount * (expectedRoi / 100), userId);
+
+    const summary = buildDashboardSummary(userId);
+    return res.status(201).json({
+      message: `Investment created successfully for ${selectedPlan.name}.`,
+      investment: {
+        id: db.prepare(`SELECT id FROM investments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`).get(userId)?.id,
+        planId: selectedPlan.id,
+        planName: selectedPlan.name,
+        amount: parsedAmount,
+        status: "active",
+        reference,
+        maturityDate: maturityDate,
+      },
+      summary,
+    });
+  } catch (error) {
+    console.error("Error creating investment:", error);
+    return res.status(500).json({ error: "Unable to record the investment at this time." });
+  }
+});
+
+app.post("/api/wallet/deposit", authMiddleware, (req, res) => {
+  try {
+    const amount = Number(req.body?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "A valid deposit amount is required." });
+
+    const userId = req.user.id;
+    const account = ensureUserFinancialAccount(userId);
+    db.prepare(`
+      UPDATE user_financial_accounts
+      SET available_balance = available_balance + ?, total_deposits = total_deposits + ?, updated_at = datetime('now')
+      WHERE user_id = ?
+    `).run(amount, amount, userId);
+
+    const reference = `DEP-${Date.now()}-${userId}`;
+    db.prepare(`
+      INSERT INTO transactions (user_id, type, amount, currency, status, reference, description, metadata, created_at)
+      VALUES (?, 'deposit', ?, 'USD', 'completed', ?, 'Wallet deposit', ?, datetime('now'))
+    `).run(userId, amount, reference, JSON.stringify({ source: "wallet_deposit" }));
+
+    db.prepare(`
+      INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+      VALUES (?, 'Deposit received', ?, 'success', 0, datetime('now'))
+    `).run(userId, `A deposit of $${amount.toLocaleString()} was recorded to your wallet.`);
+
+    return res.status(201).json({ message: "Deposit recorded successfully.", account: buildDashboardSummary(userId).totals });
+  } catch (error) {
+    console.error("Error recording deposit:", error);
+    return res.status(500).json({ error: "Unable to record the deposit right now." });
+  }
+});
+
+app.post("/api/wallet/withdraw", authMiddleware, (req, res) => {
+  try {
+    const amount = Number(req.body?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "A valid withdrawal amount is required." });
+
+    const userId = req.user.id;
+    const account = ensureUserFinancialAccount(userId);
+    if (amount > Number(account.available_balance || 0)) {
+      return res.status(400).json({ error: "Withdrawal amount exceeds your available balance." });
+    }
+
+    db.prepare(`
+      UPDATE user_financial_accounts
+      SET available_balance = available_balance - ?, total_withdrawals = total_withdrawals + ?, updated_at = datetime('now')
+      WHERE user_id = ?
+    `).run(amount, amount, userId);
+
+    const reference = `WTH-${Date.now()}-${userId}`;
+    db.prepare(`
+      INSERT INTO transactions (user_id, type, amount, currency, status, reference, description, metadata, created_at)
+      VALUES (?, 'withdrawal', ?, 'USD', 'pending', ?, 'Withdrawal request', ?, datetime('now'))
+    `).run(userId, amount, reference, JSON.stringify({ source: "wallet_withdrawal" }));
+
+    db.prepare(`
+      INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+      VALUES (?, 'Withdrawal requested', ?, 'info', 0, datetime('now'))
+    `).run(userId, `A withdrawal request of $${amount.toLocaleString()} has been submitted.`);
+
+    return res.status(201).json({ message: "Withdrawal request created successfully.", account: buildDashboardSummary(userId).totals });
+  } catch (error) {
+    console.error("Error creating withdrawal request:", error);
+    return res.status(500).json({ error: "Unable to create the withdrawal request right now." });
+  }
 });
 
 app.get("/api/transactions", (req, res) => {
   try {
+    const authHeader = req.headers.authorization || "";
+    const [scheme, token] = authHeader.split(" ");
+
+    if (scheme === "Bearer" && token) {
+      try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        const user = getUserById(payload.id);
+        if (user && user.account_status === "active") {
+          const txs = db.prepare(`SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 25`).all(user.id);
+          return res.json({ transactions: txs.map((tx) => ({
+            id: tx.id,
+            type: tx.type,
+            amount: Number(tx.amount || 0),
+            currency: tx.currency || "USD",
+            status: tx.status,
+            description: tx.description,
+            reference: tx.reference,
+            createdAt: tx.created_at,
+          })) });
+        }
+      } catch (err) {
+        // fall through to public feed
+      }
+    }
+
     const txs = loadTransactions().filter((tx) => tx && tx.status === "completed" && tx.isPublic !== false).sort((a, b) => new Date(b.completedAt || b.createdAt || 0) - new Date(a.completedAt || a.createdAt || 0)).slice(0, Number(req.query.limit) || 10);
     return res.json({ transactions: txs });
   } catch (err) {
@@ -643,12 +1272,13 @@ app.get("/api/admin/users", authMiddleware, requireAdmin, (req, res) => {
 
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const totalRow = db.prepare(`SELECT COUNT(*) AS total FROM users ${whereClause}`).get(...params);
-  const rows = db.prepare(`SELECT id, name, email, email_verified, account_status, created_at, last_login_at, is_admin FROM users ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  const rows = db.prepare(`SELECT id, name, username, email, email_verified, account_status, created_at, last_login_at, is_admin FROM users ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
 
   return res.json({
     users: rows.map((row) => ({
       id: row.id,
       name: row.name,
+      username: row.username,
       email: row.email,
       emailVerified: !!row.email_verified,
       accountStatus: row.account_status,
@@ -713,12 +1343,12 @@ app.patch("/api/admin/users/:id/status", authMiddleware, requireAdmin, (req, res
 
 app.get("/api/admin/export", authMiddleware, requireAdmin, (req, res) => {
   const type = String(req.query.type || "json").toLowerCase();
-  const users = db.prepare(`SELECT id, name, email, email_verified, account_status, created_at, last_login_at FROM users ORDER BY created_at DESC`).all();
+  const users = db.prepare(`SELECT id, name, username, email, email_verified, account_status, created_at, last_login_at FROM users ORDER BY created_at DESC`).all();
   const events = db.prepare(`SELECT id, user_id, email, event_type, outcome, reason, metadata, created_at FROM auth_events ORDER BY created_at DESC`).all();
 
   if (type === "csv") {
-    const rows = [["type", "id", "user_id", "name", "email", "email_verified", "account_status", "created_at", "last_login_at", "event_type", "outcome", "reason", "metadata"]];
-    users.forEach((user) => rows.push(["user", user.id, "", user.name, user.email, !!user.email_verified, user.account_status, user.created_at, user.last_login_at, "", "", "", ""]));
+    const rows = [["type", "id", "user_id", "name", "username", "email", "email_verified", "account_status", "created_at", "last_login_at", "event_type", "outcome", "reason", "metadata"]];
+    users.forEach((user) => rows.push(["user", user.id, "", user.name, user.username || "", user.email, !!user.email_verified, user.account_status, user.created_at, user.last_login_at, "", "", "", ""]));
     events.forEach((event) => rows.push(["event", "", event.user_id, "", event.email || "", "", "", "", "", event.event_type, event.outcome, event.reason || "", event.metadata || ""]));
     const csv = rows.map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     res.setHeader("Content-Type", "text/csv");
@@ -731,6 +1361,15 @@ app.get("/api/admin/export", authMiddleware, requireAdmin, (req, res) => {
   return res.json({ users, authEvents: events.map((row) => ({ ...row, metadata: row.metadata ? JSON.parse(row.metadata) : null })) });
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend listening on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Backend listening on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = {
+  app,
+  isEmailDeliveryConfigured,
+  shouldAutoVerifyEmails,
+  sendVerificationEmail,
+};

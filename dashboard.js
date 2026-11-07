@@ -1,24 +1,22 @@
 const API_BASE =
-  window.API_BASE ||
-  "https://quantum-ledger-org.onrender.com"; // backend base URL (prod); override by setting window.API_BASE before script loads
-const COINGECKO_URL =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false";
-
-// Your demo portfolio (amounts you hold)
-const DEMO_HOLDINGS = [
-  { id: "bitcoin", symbol: "BTC", label: "Bitcoin (BTC)", amount: 0.35 },
-  { id: "ethereum", symbol: "ETH", label: "Ethereum (ETH)", amount: 4.8 },
-  { id: "tether", symbol: "USDT", label: "Tether (USDT)", amount: 3000 },
-  { id: "solana", symbol: "SOL", label: "Solana (SOL)", amount: 45 },
-];
+  window.API_BASE || "https://quantum-ledger-org.onrender.com";
+const MARKET_URL =
+  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,tether,ripple,binancecoin&order=market_cap_desc&per_page=6&page=1&sparkline=false";
 
 let cachedMarket = [];
 
 function formatCurrency(value) {
-  return `$${value.toLocaleString("en-US", {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  }).format(Number(value || 0));
+}
+
+function formatSignedCurrency(value) {
+  const formatted = formatCurrency(value);
+  return value >= 0 ? `+${formatted}` : `-${formatCurrency(Math.abs(value))}`;
 }
 
 function getToken() {
@@ -45,7 +43,6 @@ function clearAuthData() {
   localStorage.removeItem("qlnCurrentUser");
 }
 
-// Call backend to verify token and get current user
 async function fetchCurrentUser() {
   const token = getToken();
   if (!token) return null;
@@ -69,170 +66,437 @@ async function fetchCurrentUser() {
   }
 }
 
-// Get live market data from CoinGecko and merge with DEMO_HOLDINGS
-async function loadPortfolioData() {
+async function fetchDashboardSummary() {
+  const token = getToken();
+  if (!token) return null;
+
   try {
-    const res = await fetch(COINGECKO_URL);
+    const res = await fetch(`${API_BASE}/api/dashboard/summary`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
     if (!res.ok) {
-      throw new Error("Failed to fetch market data");
+      return null;
     }
 
-    const marketData = await res.json(); // array of coins
-    const byId = {};
-    marketData.forEach((coin) => {
-      byId[coin.id] = coin;
-    });
-
-    let totalValue = 0;
-    let topAsset = null;
-
-    const enrichedHoldings = DEMO_HOLDINGS.map((h) => {
-      const coin = byId[h.id];
-      let price = 0;
-      let change24h = 0;
-
-      if (coin) {
-        price = coin.current_price || 0;
-        change24h = coin.price_change_percentage_24h || 0;
-      }
-
-      const value = price * h.amount;
-      totalValue += value;
-
-      const enriched = {
-        ...h,
-        price,
-        value,
-        change24h,
-      };
-
-      if (!topAsset || value > topAsset.value) {
-        topAsset = enriched;
-      }
-
-      return enriched;
-    });
-
-    return {
-      holdings: enrichedHoldings,
-      totalValue,
-      topAsset,
-      lastUpdated: new Date(),
-      market: marketData,
-    };
+    return await res.json();
   } catch (err) {
-    console.error("Error loading portfolio data:", err);
-
-    // Fallback: static approximations if API fails
-    const fallbackHoldings = [
-      { ...DEMO_HOLDINGS[0], price: 26000, value: 26000 * DEMO_HOLDINGS[0].amount, change24h: 3.2 },
-      { ...DEMO_HOLDINGS[1], price: 1800, value: 1800 * DEMO_HOLDINGS[1].amount, change24h: 1.4 },
-      { ...DEMO_HOLDINGS[2], price: 1, value: DEMO_HOLDINGS[2].amount * 1, change24h: 0.0 },
-      { ...DEMO_HOLDINGS[3], price: 150, value: 150 * DEMO_HOLDINGS[3].amount, change24h: 5.1 },
-    ];
-
-    let totalValue = 0;
-    let topAsset = fallbackHoldings[0];
-
-    fallbackHoldings.forEach((h) => {
-      totalValue += h.value;
-      if (!topAsset || h.value > topAsset.value) {
-        topAsset = h;
-      }
-    });
-
-    return {
-      holdings: fallbackHoldings,
-      totalValue,
-      topAsset,
-      lastUpdated: new Date(),
-      market: [],
-    };
+    console.error("Error loading dashboard summary:", err);
+    return null;
   }
 }
 
-// Fill in dashboard UI with user + portfolio data
-function populateDashboard(user, portfolio) {
-  const nameEl = document.getElementById("dash-username");
-  const totalBalanceEl = document.getElementById("dash-total-balance");
-  const holdingsGrid = document.getElementById("dash-asset-grid");
-  const lastUpdatedEl = document.getElementById("dash-last-updated");
+async function loadMarketData() {
+  try {
+    const res = await fetch(MARKET_URL);
+    if (!res.ok) throw new Error("Market request failed");
 
-  if (nameEl) {
-    nameEl.textContent = user.name || user.email;
+    const market = await res.json();
+    cachedMarket = Array.isArray(market) ? market : [];
+    return cachedMarket;
+  } catch (err) {
+    console.error("Error loading market data:", err);
+    cachedMarket = [];
+    return [];
+  }
+}
+
+async function fetchPlans() {
+  try {
+    const res = await fetch(`${API_BASE}/api/investment-plans`);
+    if (!res.ok) throw new Error("Plans request failed");
+    const data = await res.json();
+    return Array.isArray(data.plans) ? data.plans : [];
+  } catch (err) {
+    console.error("Unable to load investment plans:", err);
+    return [];
+  }
+}
+
+function updateLastUpdatedLabel() {
+  const badge = document.getElementById("dash-last-updated");
+  if (!badge) return;
+
+  const now = new Date();
+  const formatted = now.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+
+  badge.textContent = `Updated ${formatted}`;
+}
+
+function renderSummaryCards(summary) {
+  const totals = summary?.totals || {
+    totalBalance: 0,
+    totalInvested: 0,
+    totalReturns: 0,
+    activeInvestments: 0,
+  };
+
+  const ids = {
+    totalBalance: "summary-total-balance",
+    totalInvested: "summary-total-invested",
+    totalReturns: "summary-total-returns",
+    activeInvestments: "summary-active-investments",
+  };
+
+  document.getElementById(ids.totalBalance).textContent = formatCurrency(totals.totalBalance);
+  document.getElementById(ids.totalInvested).textContent = formatCurrency(totals.totalInvested);
+  document.getElementById(ids.totalReturns).textContent = formatCurrency(totals.totalReturns);
+  document.getElementById(ids.activeInvestments).textContent = String(totals.activeInvestments || 0);
+
+  document.getElementById("dash-total-balance").textContent = formatCurrency(totals.totalBalance);
+  updateLastUpdatedLabel();
+}
+
+function renderPlans(plans) {
+  const container = document.getElementById("investment-plans");
+  if (!container) return;
+
+  if (!plans.length) {
+    container.innerHTML = '<p class="empty-state">Investment plans are currently unavailable.</p>';
+    return;
   }
 
-  if (lastUpdatedEl && portfolio.lastUpdated) {
-    const t = portfolio.lastUpdated;
-    const hh = String(t.getHours()).padStart(2, "0");
-    const mm = String(t.getMinutes()).padStart(2, "0");
-    const ss = String(t.getSeconds()).padStart(2, "0");
-    lastUpdatedEl.textContent = `Last updated: ${hh}:${mm}:${ss}`;
+  container.innerHTML = plans
+    .map(
+      (plan) => `
+        <div class="plan-item">
+          <div class="plan-top-row">
+            <div class="plan-name">${plan.name}</div>
+            <div class="plan-roi">ROI ${plan.roi || "0%"}</div>
+          </div>
+          <p>${plan.description || "Professional portfolio allocation strategy."}</p>
+          <div class="plan-meta">
+            <span>Min: ${formatCurrency(plan.minimum || 0)}</span>
+            <span>Duration: ${plan.duration || "N/A"}</span>
+          </div>
+          <div class="plan-meta" style="margin-top:.5rem;">
+            <span>Risk: ${plan.risk || "Moderate"}</span>
+            <span>Fee: ${plan.fee || "0%"}</span>
+          </div>
+          <button class="btn btn-primary btn-sm" style="margin-top:.8rem;" type="button" data-invest-plan="${plan.id}">Invest Now</button>
+        </div>
+      `
+    )
+    .join("");
+
+  container.querySelectorAll('[data-invest-plan]').forEach((button) => {
+    button.addEventListener("click", async () => {
+      const planId = button.dataset.investPlan;
+      const plan = plans.find((item) => item.id === planId);
+      if (!plan) return;
+
+      const minimum = Number(plan.minimum || 0);
+      const proposed = Number.isFinite(minimum) && minimum > 0 ? String(minimum) : "500";
+      const amountInput = window.prompt(`Enter your investment amount in USD for ${plan.name}. Minimum: ${formatCurrency(minimum)}.`, proposed);
+      if (amountInput === null) return;
+
+      const amount = Number(amountInput);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        alert("Please enter a valid investment amount greater than zero.");
+        return;
+      }
+
+      if (amount < minimum) {
+        alert(`The minimum investment for ${plan.name} is ${formatCurrency(minimum)}.`);
+        return;
+      }
+
+      await submitActionRequest({ action: "Buy", amount, asset: { name: "Bitcoin", symbol: "BTC" }, planId: plan.id });
+    });
+  });
+}
+
+async function submitActionRequest({ action, amount, asset, planId = null }) {
+  const token = getToken();
+  if (!token) {
+    window.location.href = "index.html";
+    return;
   }
 
-  if (totalBalanceEl) {
-    totalBalanceEl.textContent = formatCurrency(portfolio.totalValue || 0);
+  const actions = {
+    Buy: { endpoint: `${API_BASE}/api/invest`, payload: { planId: planId || "starter", amount, assetName: asset?.name || "Bitcoin", assetSymbol: asset?.symbol || "BTC" } },
+    Deposit: { endpoint: `${API_BASE}/api/wallet/deposit`, payload: { amount } },
+    Withdraw: { endpoint: `${API_BASE}/api/wallet/withdraw`, payload: { amount } },
+  };
+
+  const config = actions[action];
+  if (!config) {
+    alert(`The ${action} action is not available yet.`);
+    return;
   }
 
-  cachedMarket = portfolio.market || [];
-
-  if (holdingsGrid) {
-    holdingsGrid.innerHTML = "";
-    const holdingsMap = {};
-    portfolio.holdings.forEach((h) => {
-      holdingsMap[h.id] = h;
+  try {
+    const res = await fetch(config.endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(config.payload),
     });
 
-    const colorMap = {
-      BTC: "#f7931a",
-      ETH: "#6b7280",
-      USDT: "#22c55e",
-      SOL: "#14b8a6",
-    };
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `Unable to complete ${action.toLowerCase()} request.`);
+    }
 
-    const dataToRender = cachedMarket.length ? cachedMarket : portfolio.holdings;
+    const summary = await fetchDashboardSummary();
+    const user = await fetchCurrentUser();
+    if (summary && user) {
+      renderDashboard(user, summary, await loadMarketData());
+      renderSummaryCards(summary);
+    }
 
-    dataToRender.forEach((coin) => {
-      const symbol = coin.symbol?.toUpperCase() || "";
-      const bg = colorMap[symbol] || "#0ea5e9";
-      const holding = holdingsMap[coin.id];
-      const amount = holding ? holding.amount : 0;
-      const price = coin.current_price || holding?.price || 0;
-      const value = price * amount;
-      const change = coin.price_change_percentage_24h || holding?.change24h || 0;
-      const changeClass = change >= 0 ? "pos" : "neg";
-      const changeLabel =
-        change || change === 0 ? `${change.toFixed(2)}%` : "N/A";
+    alert(data.message || `${action} request submitted successfully.`);
+    return data;
+  } catch (error) {
+    alert(error.message || "Request failed.");
+    return null;
+  }
+}
 
-      const card = document.createElement("div");
-      card.className = "dash-asset-card";
+function renderHoldings(holdings) {
+  const container = document.getElementById("dash-asset-grid");
+  if (!container) return;
 
-      card.innerHTML = `
-        <div class="dash-asset-top">
-          <div class="dash-asset-name">
-            <div class="dash-asset-icon" style="background:${bg}">${symbol.slice(
-              0,
-              3
-            )}</div>
-            <div>
-              <div>${coin.name || holding?.label || symbol}</div>
-              <div class="dash-asset-value">${amount.toFixed(8)} ${symbol}</div>
+  if (!holdings.length) {
+    container.innerHTML = `
+      <div class="empty-state-card">
+        <h4>No holdings yet</h4>
+        <p>Your portfolio will appear here after a verified acquisition or allocation.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const colorMap = {
+    BTC: "#f7931a",
+    ETH: "#6b7280",
+    USDT: "#22c55e",
+    SOL: "#14b8a6",
+    XRP: "#5b9cff",
+    BNB: "#f3ba2f",
+  };
+
+  container.innerHTML = holdings
+    .map((holding) => {
+      const symbol = String(holding.assetSymbol || "").toUpperCase();
+      const color = colorMap[symbol] || "#0ea5e9";
+      const allocation = Number(holding.allocationPercentage || 0);
+      const pnl = Number(holding.profitLoss || 0);
+      return `
+        <div class="dash-asset-card">
+          <div class="dash-asset-top">
+            <div class="dash-asset-name">
+              <div class="dash-asset-icon" style="background:${color}">${symbol.slice(0, 3)}</div>
+              <div>
+                <div>${holding.assetName || symbol}</div>
+                <div class="dash-asset-amount">${Number(holding.quantity || 0).toFixed(4)} ${symbol}</div>
+              </div>
             </div>
+            <div class="dash-asset-price">${formatCurrency(holding.currentValue || 0)}</div>
           </div>
-          <div class="dash-asset-price">${formatCurrency(price)}</div>
-        </div>
-        <div class="dash-asset-row">
-          <div class="dash-asset-value">=${formatCurrency(value || 0)}</div>
-          <div class="dash-asset-change ${changeClass}">${changeLabel}</div>
+          <div class="dash-asset-row">
+            <div class="dash-asset-value">Avg cost: ${formatCurrency(holding.averageCostBasis || 0)}</div>
+            <div class="dash-asset-change ${pnl >= 0 ? "pos" : "neg"}">${formatSignedCurrency(pnl)}</div>
+          </div>
+          <div class="dash-asset-row">
+            <div class="dash-asset-value">Allocation: ${allocation.toFixed(1)}%</div>
+            <div class="dash-asset-value">${holding.currency || "USD"}</div>
+          </div>
         </div>
       `;
+    })
+    .join("");
+}
 
-      holdingsGrid.appendChild(card);
-    });
+function renderInvestments(investments) {
+  const container = document.getElementById("dashboard-investments");
+  if (!container) return;
+
+  if (!investments.length) {
+    container.innerHTML = '<p class="empty-state">No active investment positions have been recorded yet.</p>';
+    return;
+  }
+
+  container.innerHTML = investments
+    .map((investment) => `
+      <div class="plan-item">
+        <div class="plan-top-row">
+          <div class="plan-name">${investment.planName || "Investment"}</div>
+          <div class="plan-risk">${investment.status || "Pending"}</div>
+        </div>
+        <div class="plan-meta">
+          <span>Amount: ${formatCurrency(investment.amount || 0)}</span>
+          <span>ROI: ${Number(investment.expectedRoi || 0)}%</span>
+        </div>
+        <div class="plan-meta" style="margin-top:.5rem;">
+          <span>Duration: ${Number(investment.durationMonths || 0)} months</span>
+          <span>Ref: ${investment.paymentReference || "—"}</span>
+        </div>
+      </div>
+    `)
+    .join("");
+}
+
+function renderNotifications(notifications) {
+  const container = document.getElementById("dashboard-notifications");
+  if (!container) return;
+
+  if (!notifications.length) {
+    container.innerHTML = '<p class="empty-state">No account notifications yet.</p>';
+    return;
+  }
+
+  container.innerHTML = notifications
+    .slice(0, 5)
+    .map(
+      (notification) => `
+        <div class="notification-item ${notification.isRead ? "is-read" : ""}">
+          <div class="notification-title">${notification.title}</div>
+          <div class="notification-message">${notification.message}</div>
+          <div class="notification-meta">${new Date(notification.createdAt).toLocaleString()}</div>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderTransactions(transactions) {
+  const container = document.getElementById("dashboard-transactions");
+  if (!container) return;
+
+  if (!transactions.length) {
+    container.innerHTML = '<p class="empty-state">No transactions have been recorded for this account.</p>';
+    return;
+  }
+
+  container.innerHTML = transactions
+    .slice(0, 8)
+    .map(
+      (tx) => `
+        <div class="transaction-row">
+          <div>
+            <div class="transaction-type">${tx.type || "Transaction"}</div>
+            <div class="transaction-meta">${new Date(tx.createdAt).toLocaleString()}</div>
+          </div>
+          <div class="transaction-status ${tx.status || "pending"}">${tx.status || "Pending"}</div>
+          <div class="transaction-amount">${formatCurrency(tx.amount || 0)}</div>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function drawPortfolioChart() {
+  const canvas = document.getElementById("portfolioChart");
+  if (!canvas) return;
+
+  const context = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+  context.clearRect(0, 0, width, height);
+
+  const gradient = context.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, "rgba(14, 165, 233, 0.35)");
+  gradient.addColorStop(1, "rgba(14, 165, 233, 0.02)");
+
+  context.fillStyle = "#f8fbff";
+  context.fillRect(0, 0, width, height);
+
+  const labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"];
+  const values = [0, 1800, 2400, 2100, 4200, 3900, 4500];
+
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 1000);
+
+  context.beginPath();
+  values.forEach((value, index) => {
+    const x = (index / (values.length - 1)) * (width - 40) + 20;
+    const y = height - ((value - min) / (max - min || 1)) * (height - 50) - 15;
+    if (index === 0) {
+      context.moveTo(x, y);
+    } else {
+      context.lineTo(x, y);
+    }
+  });
+  context.strokeStyle = "#0ea5e9";
+  context.lineWidth = 3;
+  context.stroke();
+
+  context.lineTo(width - 20, height - 15);
+  context.lineTo(20, height - 15);
+  context.closePath();
+  context.fillStyle = gradient;
+  context.fill();
+
+  labels.forEach((label, index) => {
+    const x = (index / (labels.length - 1)) * (width - 40) + 20;
+    context.fillStyle = "#64748b";
+    context.font = "12px Poppins";
+    context.fillText(label, x - 8, height - 5);
+  });
+}
+
+function renderDashboard(user, summary, marketData) {
+  const name = user?.name || user?.username || user?.email || "Investor";
+  const firstName = String(name).split(" ")[0];
+  const welcome = document.getElementById("dash-welcome-message");
+  if (welcome) {
+    welcome.textContent = `Welcome back, ${firstName}`;
+  }
+
+  const usernameEl = document.getElementById("dash-username");
+  if (usernameEl) {
+    usernameEl.textContent = firstName;
+  }
+
+  const totals = summary?.totals || { totalBalance: 0, totalInvested: 0, totalReturns: 0, activeInvestments: 0 };
+  document.getElementById("dash-total-balance").textContent = formatCurrency(totals.totalBalance);
+  document.getElementById("summary-total-balance").textContent = formatCurrency(totals.totalBalance);
+  document.getElementById("summary-total-invested").textContent = formatCurrency(totals.totalInvested);
+  document.getElementById("summary-total-returns").textContent = formatCurrency(totals.totalReturns);
+  document.getElementById("summary-active-investments").textContent = String(totals.activeInvestments || 0);
+
+  renderHoldings(summary?.holdings || []);
+  renderInvestments(summary?.investments || []);
+  renderNotifications(summary?.notifications || []);
+  renderTransactions(summary?.transactions || []);
+  drawPortfolioChart();
+
+  if (Array.isArray(marketData) && marketData.length) {
+    const marketHtml = marketData
+      .slice(0, 6)
+      .map((coin) => {
+        const change = Number(coin.price_change_percentage_24h || 0);
+        const changeClass = change >= 0 ? "pos" : "neg";
+        return `
+          <div class="market-row">
+            <div class="market-coin">
+              <span class="market-symbol">${String(coin.symbol || "").toUpperCase()}</span>
+              <span class="market-name">${coin.name || "Asset"}</span>
+            </div>
+            <span class="market-price">${formatCurrency(coin.current_price || 0)}</span>
+            <span class="market-change ${changeClass}">${change.toFixed(2)}%</span>
+          </div>
+        `;
+      })
+      .join("");
+
+    const target = document.getElementById("dash-asset-grid");
+    if (target && !summary?.holdings?.length) {
+      target.innerHTML = marketHtml;
+    }
   }
 }
 
-// Logout handler
 function setupLogout() {
   const btn = document.getElementById("dash-logout");
   if (!btn) return;
@@ -250,9 +514,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
 
-  // 1. Validate user with backend
   let user = await fetchCurrentUser();
-
   if (!user) {
     const storedUser = getStoredUser();
     if (storedUser) {
@@ -264,11 +526,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // 2. Load live portfolio data
-  const portfolio = await loadPortfolioData();
+  updateLastUpdatedLabel();
+  window.setInterval(updateLastUpdatedLabel, 1000);
 
-  // 3. Populate UI
-  populateDashboard(user, portfolio);
+  const marketData = await loadMarketData();
+  const summary = await fetchDashboardSummary();
+  const plans = await fetchPlans();
+  renderPlans(plans);
+  renderDashboard(user, summary || { totals: { totalBalance: 0, totalInvested: 0, totalReturns: 0, activeInvestments: 0 }, holdings: [], investments: [], notifications: [], transactions: [] }, marketData);
+  renderSummaryCards(summary || { totals: { totalBalance: 0, totalInvested: 0, totalReturns: 0, activeInvestments: 0 } });
   setupLogout();
   setupActionModals();
 });
@@ -281,8 +547,8 @@ function setupActionModals() {
   const overlay = document.querySelector(".dash-action-overlay");
   const amountInput = document.getElementById("dash-action-amount");
   const confirmBtn = document.getElementById("dash-action-confirm");
-
   const actionButtons = document.querySelectorAll("[data-action]");
+
   if (!modal || !modalTitle || !modalList || !actionButtons.length) return;
 
   let currentAction = null;
@@ -306,11 +572,12 @@ function setupActionModals() {
   function renderList() {
     modalList.innerHTML = "";
     const data = cachedMarket.length ? cachedMarket : [];
+
     if (!data.length) {
-      modalList.innerHTML =
-        "<p style=\"padding:1rem;\">No assets loaded yet. Try again in a moment.</p>";
+      modalList.innerHTML = "<p style='padding:1rem;'>No assets loaded yet. Try again in a moment.</p>";
       return;
     }
+
     data.forEach((coin) => {
       const row = document.createElement("button");
       row.className = "dash-action-asset";
@@ -318,16 +585,13 @@ function setupActionModals() {
       row.innerHTML = `
         <div>
           <div class="dash-action-asset-name">${coin.name}</div>
-          <div class="dash-action-asset-symbol">${coin.symbol.toUpperCase()}</div>
+          <div class="dash-action-asset-symbol">${String(coin.symbol || "").toUpperCase()}</div>
         </div>
-        <div class="dash-action-asset-price">${formatCurrency(
-          coin.current_price || 0
-        )}</div>
+        <div class="dash-action-asset-price">${formatCurrency(coin.current_price || 0)}</div>
       `;
       row.addEventListener("click", () => {
         selectedAsset = coin;
-        const rows = modalList.querySelectorAll(".dash-action-asset");
-        rows.forEach((r) => r.classList.remove("selected"));
+        modalList.querySelectorAll(".dash-action-asset").forEach((asset) => asset.classList.remove("selected"));
         row.classList.add("selected");
       });
       modalList.appendChild(row);
@@ -344,20 +608,28 @@ function setupActionModals() {
   if (overlay) overlay.addEventListener("click", closeModal);
 
   if (confirmBtn) {
-    confirmBtn.addEventListener("click", () => {
+    confirmBtn.addEventListener("click", async () => {
       if (!selectedAsset) {
         alert("Select an asset first.");
         return;
       }
-      const amt = parseFloat(amountInput.value || "0");
-      if (!amt || amt <= 0) {
+      const amount = parseFloat(amountInput.value || "0");
+      if (!amount || amount <= 0) {
         alert("Enter an amount greater than zero.");
         return;
       }
-      alert(
-        `Demo ${currentAction} request for ${amt} ${selectedAsset.symbol.toUpperCase()} submitted.`
-      );
-      closeModal();
+
+      const action = currentAction || "Buy";
+      const result = await submitActionRequest({
+        action,
+        amount,
+        asset: { name: selectedAsset.name, symbol: selectedAsset.symbol },
+        planId: null,
+      });
+
+      if (result) {
+        closeModal();
+      }
     });
   }
 

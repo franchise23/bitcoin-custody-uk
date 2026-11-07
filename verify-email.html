@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verify your email · Bitcoin Custody UK</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    const host = window.location.hostname || "";
+    const isLocalDev = host === "localhost" || host === "127.0.0.1" || host === "" || window.location.protocol === "file:";
+    window.API_BASE = isLocalDev ? "http://localhost:4100" : "https://quantum-ledger-org.onrender.com";
+  </script>
+</head>
+<body class="auth-page" data-page="verify">
+  <header class="auth-topbar">
+    <div class="container auth-topbar-inner">
+      <a href="index.html" class="brand-lockup" aria-label="Bitcoin Custody UK homepage">
+        <span class="brand-mark" aria-hidden="true"><span class="brand-mark-inner"></span></span>
+        <span class="brand-wordmark">
+          <span class="brand-wordmark-top">Bitcoin</span>
+          <span class="brand-wordmark-bottom">Custody UK</span>
+        </span>
+      </a>
+    </div>
+  </header>
+
+  <main class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-header">
+        <span class="eyebrow">Security check</span>
+        <h1>Verify your email address</h1>
+        <p>We’ve sent a six-digit verification code to your email address. Enter it below to complete your registration.</p>
+      </div>
+
+      <form id="verification-form" novalidate>
+        <div class="otp-grid" aria-label="One-time password entry">
+          <input class="otp-input" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 1" />
+          <input class="otp-input" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 2" />
+          <input class="otp-input" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 3" />
+          <input class="otp-input" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 4" />
+          <input class="otp-input" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 5" />
+          <input class="otp-input" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 6" />
+        </div>
+
+        <button id="verify-button" class="btn btn-primary auth-submit" type="submit">Verify account</button>
+
+        <div class="auth-row centered-row">
+          <button id="resend-code" type="button" class="btn btn-outline btn-small">Resend code</button>
+        </div>
+      </form>
+
+      <div id="auth-feedback" class="auth-feedback" aria-live="polite"></div>
+    </div>
+  </main>
+
+  <script src="auth.js"></script>
+</body>
+</html>

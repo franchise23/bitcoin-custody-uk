@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register · Bitcoin Custody UK</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    const host = window.location.hostname || "";
+    const isLocalDev = host === "localhost" || host === "127.0.0.1" || host === "" || window.location.protocol === "file:";
+    window.API_BASE = isLocalDev ? "http://localhost:4100" : "https://quantum-ledger-org.onrender.com";
+  </script>
+</head>
+<body class="auth-page" data-page="register">
+  <header class="auth-topbar">
+    <div class="container auth-topbar-inner">
+      <a href="index.html" class="brand-lockup" aria-label="Bitcoin Custody UK homepage">
+        <span class="brand-mark" aria-hidden="true"><span class="brand-mark-inner"></span></span>
+        <span class="brand-wordmark">
+          <span class="brand-wordmark-top">Bitcoin</span>
+          <span class="brand-wordmark-bottom">Custody UK</span>
+        </span>
+      </a>
+    </div>
+  </header>
+
+  <main class="auth-shell">
+    <div class="auth-card auth-card-wide">
+      <div class="auth-header">
+        <span class="eyebrow">Create a secure account</span>
+        <h1>Register</h1>
+        <p>Open a verified account to manage your digital asset portfolio with confidence.</p>
+      </div>
+
+      <form id="register-form" novalidate>
+        <div class="form-grid two-columns">
+          <div class="form-group">
+            <label for="register-name">Full name</label>
+            <input id="register-name" name="name" type="text" autocomplete="name" required />
+          </div>
+          <div class="form-group">
+            <label for="register-username">Username</label>
+            <input id="register-username" name="username" type="text" autocomplete="username" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="register-email">Email address</label>
+          <input id="register-email" name="email" type="email" autocomplete="email" required />
+        </div>
+
+        <div class="form-group password-field">
+          <label for="register-password">Password</label>
+          <div class="password-input-wrap">
+            <input id="register-password" name="password" type="password" autocomplete="new-password" required />
+            <button type="button" class="toggle-password" data-toggle-password="register-password" aria-label="Show password">Show</button>
+          </div>
+        </div>
+
+        <div class="form-group password-field">
+          <label for="register-confirm-password">Confirm password</label>
+          <div class="password-input-wrap">
+            <input id="register-confirm-password" name="confirmPassword" type="password" autocomplete="new-password" required />
+            <button type="button" class="toggle-password" data-toggle-password="register-confirm-password" aria-label="Show password">Show</button>
+          </div>
+          <div id="password-confirm-message" class="field-message"></div>
+        </div>
+
+        <div class="password-strength-card">
+          <div class="strength-row">
+            <span>Password strength</span>
+            <strong id="password-strength-text">Not started</strong>
+          </div>
+          <div class="strength-meter"><span id="password-strength-meter"></span></div>
+          <ul id="password-requirements" class="password-requirements">
+            <li><span>•</span> 8+ characters</li>
+            <li><span>•</span> One uppercase letter</li>
+            <li><span>•</span> One lowercase letter</li>
+            <li><span>•</span> One number</li>
+            <li><span>•</span> One special character</li>
+          </ul>
+        </div>
+
+        <button id="register-button" class="btn btn-primary auth-submit" type="submit" disabled>Create account</button>
+
+        <div class="auth-foot">
+          <p>Already have an account? <a href="login.html">Log in</a></p>
+        </div>
+      </form>
+
+      <div id="auth-feedback" class="auth-feedback" aria-live="polite"></div>
+    </div>
+  </main>
+
+  <script src="auth.js"></script>
+</body>
+</html>

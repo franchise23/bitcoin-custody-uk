@@ -45,7 +45,7 @@
   class SocialProof {
     constructor(options = {}) {
       const quantumUtils = window.QuantumUtils || {};
-      const fallbackBase = quantumUtils.resolveApiBase ? quantumUtils.resolveApiBase(window.API_BASE) : (window.API_BASE || "http://localhost:4000");
+      const fallbackBase = quantumUtils.resolveApiBase ? quantumUtils.resolveApiBase(window.API_BASE) : (window.API_BASE || "http://localhost:4100");
 
       this.containerId = options.containerId || "social-proof-toast-container";
       this.fetchUrl =

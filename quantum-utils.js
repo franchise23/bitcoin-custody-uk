@@ -1,6 +1,6 @@
 (function (global) {
   const DEFAULT_API_BASES = [
-    "http://localhost:4000",
+    "http://localhost:4100",
     "https://quantum-ledger-org.onrender.com",
     "https://bitcoin-custody-uk.onrender.com",
   ];
@@ -23,7 +23,7 @@
       unique.push(value);
     });
 
-    return unique[0] || "http://localhost:4000";
+    return unique[0] || "http://localhost:4100";
   }
 
   function normalizeStatus(value) {

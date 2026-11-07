@@ -315,7 +315,18 @@ function setupAuthSystem() {
         }
 
         closeModal();
-        alert(data?.message || "Registration successful. Please check your email to verify your account before logging in.");
+        if (data?.verificationUrl) {
+          const linkMessage = data.emailSent
+            ? "Registration successful. Please check your email to verify your account before logging in."
+            : `Registration successful. Use this verification link to activate your account: ${data.verificationUrl}`;
+
+          alert(linkMessage);
+          if (!data.emailSent) {
+            window.open(data.verificationUrl, "_blank", "noopener,noreferrer");
+          }
+        } else {
+          alert(data?.message || "Registration successful. Please check your email to verify your account before logging in.");
+        }
       } catch (err) {
         console.error("Error during register:", err);
         alert("Unable to register right now. Is the backend running?");
@@ -421,7 +432,7 @@ function setupSocialProof() {
 
   const feed = new window.SocialProof({
     containerId: "social-proof-toast-container",
-    fetchUrl: `${window.API_BASE || "http://localhost:4000"}/api/transactions?limit=8`,
+    fetchUrl: `${window.API_BASE || "http://localhost:4100"}/api/transactions?limit=8`,
     intervalMs: 10000,
   });
 
@@ -517,7 +528,7 @@ async function fetchCoinGeckoTicker() {
 async function fetchMarketTickerData() {
   const baseCandidates = Array.from(
     new Set(
-      [window.API_BASE, API_BASE, "https://quantum-ledger-org.onrender.com", "https://bitcoin-custody-uk.onrender.com", "http://localhost:4000"].filter(Boolean)
+      [window.API_BASE, API_BASE, "https://quantum-ledger-org.onrender.com", "https://bitcoin-custody-uk.onrender.com", "http://localhost:4100"].filter(Boolean)
     )
   );
 
