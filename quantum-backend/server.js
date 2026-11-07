@@ -287,6 +287,46 @@ function getInvestmentPlans() {
   ];
 }
 
+function getAssetReferencePrice(symbol) {
+  const prices = {
+    BTC: 68000,
+    ETH: 3600,
+    SOL: 145,
+    USDT: 1,
+    XRP: 0.63,
+    BNB: 580,
+  };
+  return Number(prices[String(symbol || "").toUpperCase()] || prices.BTC || 68000);
+}
+
+function upsertPortfolioHolding(userId, assetSymbol, assetName, amount, allocationPercent = 100) {
+  const symbol = String(assetSymbol || "BTC").toUpperCase();
+  const quantity = amount / Math.max(getAssetReferencePrice(symbol), 0.000001);
+  const currentValue = amount;
+  const existing = db.prepare(`SELECT * FROM portfolio_holdings WHERE user_id = ? AND asset_symbol = ?`).get(Number(userId), symbol);
+
+  if (existing) {
+    const newQuantity = Number(existing.quantity || 0) + quantity;
+    const newCurrentValue = Number(existing.current_value || 0) + currentValue;
+    const newAverageCost = (Number(existing.average_cost_basis || 0) * Number(existing.quantity || 0) + amount) / Math.max(newQuantity, 0.000001);
+    const profitLoss = newCurrentValue - newAverageCost * newQuantity;
+
+    db.prepare(`
+      UPDATE portfolio_holdings
+      SET quantity = ?, average_cost_basis = ?, current_value = ?, profit_loss = ?, allocation_percentage = ?, updated_at = datetime('now')
+      WHERE user_id = ? AND asset_symbol = ?
+    `).run(newQuantity, newAverageCost, newCurrentValue, profitLoss, allocationPercent, Number(userId), symbol);
+    return db.prepare(`SELECT * FROM portfolio_holdings WHERE user_id = ? AND asset_symbol = ?`).get(Number(userId), symbol);
+  }
+
+  db.prepare(`
+    INSERT INTO portfolio_holdings (user_id, asset_symbol, asset_name, quantity, average_cost_basis, current_value, profit_loss, allocation_percentage, currency, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?, 'USD', datetime('now'), datetime('now'))
+  `).run(Number(userId), symbol, String(assetName || symbol), quantity, amount, currentValue, allocationPercent);
+
+  return db.prepare(`SELECT * FROM portfolio_holdings WHERE user_id = ? AND asset_symbol = ?`).get(Number(userId), symbol);
+}
+
 function inferInvestmentPlanId(amount) {
   const value = Number(amount || 0);
   if (!Number.isFinite(value) || value <= 0) return "starter";
@@ -1032,6 +1072,8 @@ app.post("/api/invest", authMiddleware, (req, res) => {
       SET total_invested = total_invested + ?, active_investments = active_investments + 1, total_returns = total_returns + ?, updated_at = datetime('now')
       WHERE user_id = ?
     `).run(parsedAmount, parsedAmount * (expectedRoi / 100), userId);
+
+    upsertPortfolioHolding(userId, assetSymbol, assetName, parsedAmount, 100);
 
     const summary = buildDashboardSummary(userId);
     return res.status(201).json({

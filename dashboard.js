@@ -395,7 +395,7 @@ function renderTransactions(transactions) {
     .join("");
 }
 
-function drawPortfolioChart() {
+function drawPortfolioChart(summary = null) {
   const canvas = document.getElementById("portfolioChart");
   if (!canvas) return;
 
@@ -404,15 +404,20 @@ function drawPortfolioChart() {
   const height = canvas.height;
   context.clearRect(0, 0, width, height);
 
-  const gradient = context.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, "rgba(14, 165, 233, 0.35)");
-  gradient.addColorStop(1, "rgba(14, 165, 233, 0.02)");
+  const baseValues = Array.isArray(summary?.holdings) && summary.holdings.length
+    ? summary.holdings.map((holding) => Number(holding.currentValue || 0))
+    : [0, 1800, 2400, 2100, 4200, 3900, 4500];
 
-  context.fillStyle = "#f8fbff";
-  context.fillRect(0, 0, width, height);
-
+  const values = baseValues.length >= 7 ? baseValues.slice(0, 7) : [...baseValues, ...Array(7 - baseValues.length).fill(0)];
   const labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"];
-  const values = [0, 1800, 2400, 2100, 4200, 3900, 4500];
+  const totalValue = values.reduce((sum, value) => sum + value, 0);
+
+  const gradient = context.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, "rgba(14, 165, 233, 0.45)");
+  gradient.addColorStop(1, "rgba(14, 165, 233, 0.03)");
+
+  context.fillStyle = "#071120";
+  context.fillRect(0, 0, width, height);
 
   const min = Math.min(...values, 0);
   const max = Math.max(...values, 1000);
@@ -427,7 +432,7 @@ function drawPortfolioChart() {
       context.lineTo(x, y);
     }
   });
-  context.strokeStyle = "#0ea5e9";
+  context.strokeStyle = "#38bdf8";
   context.lineWidth = 3;
   context.stroke();
 
@@ -437,12 +442,22 @@ function drawPortfolioChart() {
   context.fillStyle = gradient;
   context.fill();
 
+  context.fillStyle = "#7dd3fc";
+  context.font = "12px Poppins";
   labels.forEach((label, index) => {
     const x = (index / (labels.length - 1)) * (width - 40) + 20;
-    context.fillStyle = "#64748b";
-    context.font = "12px Poppins";
     context.fillText(label, x - 8, height - 5);
   });
+
+  if (totalValue > 0) {
+    const textX = width - 150;
+    const textY = 26;
+    context.fillStyle = "rgba(15, 118, 110, 0.9)";
+    context.fillRect(textX, textY - 14, 118, 24);
+    context.fillStyle = "#ecfeff";
+    context.font = "600 12px Poppins";
+    context.fillText(`${formatCurrency(totalValue)}`, textX + 10, textY + 2);
+  }
 }
 
 function renderDashboard(user, summary, marketData) {
@@ -469,7 +484,7 @@ function renderDashboard(user, summary, marketData) {
   renderInvestments(summary?.investments || []);
   renderNotifications(summary?.notifications || []);
   renderTransactions(summary?.transactions || []);
-  drawPortfolioChart();
+  drawPortfolioChart(summary || { holdings: [] });
 
   if (Array.isArray(marketData) && marketData.length) {
     const marketHtml = marketData
