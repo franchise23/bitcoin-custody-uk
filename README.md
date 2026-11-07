@@ -4,8 +4,8 @@ A crypto portfolio and account platform with a secure backend API and a polished
 
 ## Live URLs
 
-- Frontend: https://franchise23.github.io/quantum-ledger-clone
-- Backend API: https://quantum-ledger-org.onrender.com
+- Frontend: https://franchise23.github.io/bitcoin-custody-uk
+- Backend API: https://bitcoin-custody-uk.onrender.com
 - Render runtime recommendation: Node 20.x (better-sqlite3 is not stable on Node 24)
 
 ## Local development
